@@ -42,6 +42,9 @@ models:
       qlora:
         min_vram_gb: 9.3
         measured_on: "RTX 5070 Ti Laptop 11.94GB, seq2048 bs1, 2026-08-21"
+        measured_at:
+          max_sequence_length: 2048
+          per_device_batch_size: 1
 
   qwen3-4b:
     enabled: true
@@ -66,6 +69,9 @@ models:
       qlora:
         min_vram_gb: 11.5
         measured_on: "RTX 5070 Ti Laptop 11.94GB, seq2048 bs1, 2026-08-21"
+        measured_at:
+          max_sequence_length: 2048
+          per_device_batch_size: 1
 
   granite-4.1-3b:
     # P1 abstraction proof. Adding this model must not require a forked trainer.
@@ -92,6 +98,9 @@ models:
       qlora:
         min_vram_gb: 8.7
         measured_on: "RTX 5070 Ti Laptop 11.94GB, seq2048 bs1, 2026-08-21"
+        measured_at:
+          max_sequence_length: 2048
+          per_device_batch_size: 1
 
   qwen3-0.6b:
     # CI / GPU smoke-test model. Not offered to end users: absent from the
@@ -116,6 +125,9 @@ models:
         # Fits, but only just: 11.89 GB reserved of 11.94 GB available.
         min_vram_gb: 13.3
         measured_on: "RTX 5070 Ti Laptop 11.94GB, seq2048 bs1, 2026-08-21"
+        measured_at:
+          max_sequence_length: 2048
+          per_device_batch_size: 1
       qlora:
         min_vram_gb: null
         measured_on: null

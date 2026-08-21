@@ -34,10 +34,40 @@ class MethodProfile:
 
     min_vram_gb: float | None = None
     measured_on: str | None = None
+    # The configuration the number was measured at. A requirement is meaningless without
+    # it: peak memory scales with sequence length and batch size, so a figure from
+    # 2048x1 must not be applied to a 512x2 job that demonstrably fits.
+    measured_max_sequence_length: int | None = None
+    measured_per_device_batch_size: int | None = None
 
     @property
     def is_measured(self) -> bool:
         return self.min_vram_gb is not None and self.measured_on is not None
+
+    @property
+    def measured_token_load(self) -> int | None:
+        """Tokens in flight per optimizer micro-step at measurement time."""
+        if self.measured_max_sequence_length is None:
+            return None
+        return self.measured_max_sequence_length * (
+            self.measured_per_device_batch_size or 1
+        )
+
+    def applies_to(self, *, max_sequence_length: int, per_device_batch_size: int) -> bool:
+        """Whether this measurement bounds the given job.
+
+        A measurement bounds a job only when the job is at least as demanding. Token load
+        (sequence length x batch size) is a coarse proxy, chosen because it is the term
+        that dominates activation and logits memory for these models — and it errs toward
+        letting smaller jobs through, where a structured OOM is the correct backstop
+        rather than a refusal based on a number that does not describe them.
+        """
+        measured = self.measured_token_load
+        if measured is None:
+            # No configuration recorded: assume it bounds everything, which is the
+            # conservative reading of a bare number.
+            return True
+        return max_sequence_length * per_device_batch_size >= measured
 
 
 @dataclass(frozen=True)
@@ -56,7 +86,11 @@ class ResourceProfile:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            method: {"minVramGb": p.min_vram_gb, "measuredOn": p.measured_on}
+            method: {
+                "minVramGb": p.min_vram_gb,
+                "measuredOn": p.measured_on,
+                "measuredTokenLoad": p.measured_token_load,
+            }
             for method, p in sorted(self.methods.items())
         }
 
@@ -152,6 +186,12 @@ class ModelRegistry:
                         method: MethodProfile(
                             min_vram_gb=(spec or {}).get("min_vram_gb"),
                             measured_on=(spec or {}).get("measured_on"),
+                            measured_max_sequence_length=(
+                                (spec or {}).get("measured_at") or {}
+                            ).get("max_sequence_length"),
+                            measured_per_device_batch_size=(
+                                (spec or {}).get("measured_at") or {}
+                            ).get("per_device_batch_size"),
                         )
                         for method, spec in (rp or {}).items()
                     }

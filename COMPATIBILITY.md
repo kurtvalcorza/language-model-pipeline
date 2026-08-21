@@ -86,10 +86,18 @@ gigabytes once upcast for the loss. That is why a 0.6B model can reach 10.66 GB.
 
 ## How the numbers are used
 
-- **`min_vram_gb`** in `model-registry.yaml` gates the run, looked up by `(model, method)`. `finetuner/resources.py`
-  compares it against the detected GPU and refuses **before** downloading weights, so a user
-  on a small GPU tier who selects a large model gets an immediate, actionable error instead
-  of a job that dies mid-download.
+- **`min_vram_gb`** in `model-registry.yaml` gates the run, looked up by `(model, method)`.
+  `finetuner/resources.py` compares it against the detected GPU and refuses **before**
+  downloading weights, so a user on a small GPU tier who selects a large model gets an
+  immediate, actionable error instead of a job that dies mid-download.
+- **A measurement only bounds jobs at least as demanding as itself.** Every number records
+  the `measured_at` configuration it came from, and preflight compares token load
+  (sequence length x batch size). A profile measured at 2048x1 says nothing about a 512x2
+  job, and applying it anyway refuses work that demonstrably runs — which is exactly what
+  happened when these numbers first landed: `qwen3-0.6b` LoRA at 13.3 GB blocked the GPU
+  integration suite, which runs the same model at 512x2 on an 11.94 GB card. For a job
+  below the measured load there is no applicable measurement, so it runs and a structured
+  `RESOURCE_OOM` is the backstop.
 - An entry whose profile is still `null` does **not** block a run. An unmeasured profile is
   not a licence to invent a number; the job proceeds and, if it does not fit, fails as a
   structured `RESOURCE_OOM` carrying real measurements.

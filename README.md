@@ -28,6 +28,10 @@ src/lmpipeline/          the shared package both containers import
 scripts/vendor_sync.py   vendor the package into consumers, with a drift gate
 DEPLOYMENT.md            the observed DIMER runtime contract, with evidence
 DATASET_SPEC.md          the dataset contract
+TRAINING_SPEC.md         methods, loss masking, bounds, metrics, lifecycle
+ARTIFACT_SPEC.md         what a run publishes and what must hold first
+PROVENANCE_SPEC.md       what is recorded, and why it is observed not requested
+COMPATIBILITY.md         measured resource matrix
 SECURITY.md              supply-chain and privacy rules
 ```
 
@@ -71,13 +75,17 @@ python -m venv .venv
 
 ## Status
 
-**PR 1 of 8.** Contracts, registry, shared package, and tests. 55 tests passing.
+**PRs 1–4 complete.** Contracts, registry, shared package, specs, and a measured resource
+matrix. 84 tests passing.
 
-Not yet written, and deliberately deferred to the PR that gives them meaning:
-`TRAINING_SPEC.md`, `ARTIFACT_SPEC.md`, `PROVENANCE_SPEC.md` (PR 3), JSON Schemas for
-job/result documents, and the DIMER registration matrix (PR 4).
+The consumer repositories are correspondingly complete: the validator runs end to end in its
+image against real tokenizers, and the finetuner trains, packages, reloads and publishes on
+a real GPU.
+
+Not yet written: JSON Schemas for job and result documents, and the `validation-datasets/`
+suite specified in issue #2 (its Phase 0 source verification is done and posted there).
 
 **Blocked:** all DIMER-side integration. Creating a `Custom / Other` pipeline currently fails
 on a `runtime_dataset_format` not-null constraint — a platform defect with no known fix or
-tracking issue. See DEPLOYMENT.md §5. Nothing in PRs 1–4 depends on it; PR 0's runtime probe
-and every acceptance step do.
+tracking issue. See DEPLOYMENT.md §5. Nothing in PRs 1–4 depended on it; PR 0's runtime
+probe and every on-platform acceptance step do.

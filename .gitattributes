@@ -1,0 +1,8 @@
+# Fixture bytes ARE the contract: their digests are asserted, and the generator must
+# reproduce them byte for byte. Git's EOL conversion would rewrite them on checkout on
+# Windows, changing every digest and breaking reproducibility for anyone who clones.
+*.jsonl -text
+*.zip binary
+
+# The registry and the expected-code map are read by tests that compare exact content.
+validation-datasets/adversarial/expected-codes.json -text

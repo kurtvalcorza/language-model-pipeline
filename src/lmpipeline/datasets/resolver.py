@@ -89,6 +89,26 @@ def safe_extract_zip(archive_path: Path, dest: Path) -> None:
                 code=Code.DATASET_ARCHIVE_TOO_LARGE,
             )
 
+        # A zip may legally carry two members with the same path. Extraction is
+        # last-one-wins, so which bytes land on disk depends on member ordering — the
+        # dataset is genuinely ambiguous and must not be guessed at.
+        seen_members: dict[str, int] = {}
+        for info in infos:
+            if info.filename.endswith("/"):
+                continue
+            canonical = PurePosixPath(info.filename.replace("\\", "/")).as_posix()
+            seen_members[canonical] = seen_members.get(canonical, 0) + 1
+        duplicated = sorted(name for name, count in seen_members.items() if count > 1)
+        if duplicated:
+            raise DatasetError(
+                "The archive contains more than one member with the same path: "
+                + ", ".join(duplicated[:5])
+                + ". Which copy would be used depends on archive ordering, so the upload "
+                "is ambiguous.",
+                code=Code.DATASET_ARCHIVE_DUPLICATE_MEMBER,
+                details={"members": duplicated[:50], "count": len(duplicated)},
+            )
+
         total = 0
         for info in infos:
             reason = _is_unsafe_member(info.filename)
@@ -177,6 +197,47 @@ def _find_content_root(root: Path) -> Path:
     return current
 
 
+# Directories that are packaging noise rather than dataset content.
+_IGNORED_DIRS = ("__MACOSX", ".git", ".ipynb_checkpoints")
+
+ALL_SPLIT_FILENAMES = frozenset(
+    name for candidates in SPLIT_CANDIDATES.values() for name in candidates
+)
+
+
+def _reject_stray_split_files(root: Path) -> None:
+    """Fail when a canonical split filename appears anywhere below the content root.
+
+    Splits are resolved at the root only. A second `train.jsonl` in a subdirectory would
+    otherwise be silently ignored, and the user would train on a different file than the
+    one they believe they uploaded — the same ambiguity as duplicate split aliases, just
+    hidden one level down.
+    """
+    strays: dict[str, list[str]] = {}
+    for path in root.rglob("*"):
+        if not path.is_file() or path.name not in ALL_SPLIT_FILENAMES:
+            continue
+        if path.parent == root:
+            continue
+        if any(part in _IGNORED_DIRS for part in path.parts):
+            continue
+        strays.setdefault(path.name, []).append(
+            path.relative_to(root).as_posix()
+        )
+
+    if strays:
+        listed = "; ".join(
+            f"{name} also at {', '.join(sorted(paths)[:3])}"
+            for name, paths in sorted(strays.items())
+        )
+        raise DatasetError(
+            "Split files were found outside the dataset root, so which copy to use is "
+            f"ambiguous: {listed}. Keep exactly one copy of each split at the top level.",
+            code=Code.DATASET_SPLIT_AMBIGUOUS,
+            details={"strays": {k: sorted(v)[:20] for k, v in sorted(strays.items())}},
+        )
+
+
 def resolve_dataset(dataset_dir: Path, *, workdir: Path) -> ResolvedDataset:
     """Resolve canonical split files from DIMER's mounted dataset directory."""
     dataset_dir = Path(dataset_dir)
@@ -204,6 +265,8 @@ def resolve_dataset(dataset_dir: Path, *, workdir: Path) -> ResolvedDataset:
     else:
         root = _find_content_root(dataset_dir)
         source, archive = "directory", None
+
+    _reject_stray_split_files(root)
 
     splits: dict[str, Path] = {}
     for split, candidates in SPLIT_CANDIDATES.items():

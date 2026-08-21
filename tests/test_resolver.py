@@ -148,3 +148,84 @@ def test_corrupt_archive_reports_cleanly(tmp_path):
     with pytest.raises(DatasetError) as exc:
         safe_extract_zip(archive, tmp_path / "out")
     assert exc.value.code == Code.DATASET_ARCHIVE_UNREADABLE
+
+
+# -- gaps found against the dataset-suite spec (issue #2 section 9) ------------
+
+
+def test_duplicate_zip_members_with_the_same_path_are_rejected(tmp_path):
+    """Spec case 22.
+
+    A zip may legally carry two members with the same path. Extraction is last-one-wins,
+    so which bytes land on disk depends on member ordering — the upload is ambiguous and
+    must not be guessed at.
+    """
+    archive = tmp_path / "dupe.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("train.jsonl", TRAIN_LINE)
+        zf.writestr("train.jsonl", '{"prompt":"DIFFERENT","completion":"x"}\n')
+    with pytest.raises(DatasetError) as exc:
+        safe_extract_zip(archive, tmp_path / "out")
+    assert exc.value.code == Code.DATASET_ARCHIVE_DUPLICATE_MEMBER
+    assert "train.jsonl" in exc.value.details["members"]
+
+
+def test_duplicate_members_are_detected_across_path_spellings(tmp_path):
+    """A zip written on Windows may use backslash separators for the same logical path."""
+    archive = tmp_path / "dupe.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("data/train.jsonl", TRAIN_LINE)
+        zf.writestr(r"data\train.jsonl", TRAIN_LINE)
+    with pytest.raises(DatasetError) as exc:
+        safe_extract_zip(archive, tmp_path / "out")
+    assert exc.value.code == Code.DATASET_ARCHIVE_DUPLICATE_MEMBER
+
+
+def test_a_second_train_file_in_a_subdirectory_is_ambiguous(tmp_path):
+    """Spec case 7.
+
+    The nested copy would previously have been silently ignored, so the user would train
+    on a different file than the one they thought they uploaded.
+    """
+    root = make_dataset_dir(tmp_path, ["train.jsonl"])
+    nested = root / "backup"
+    nested.mkdir()
+    (nested / "train.jsonl").write_text(TRAIN_LINE, encoding="utf-8")
+
+    with pytest.raises(DatasetError) as exc:
+        resolve_dataset(root, workdir=tmp_path / "work")
+    assert exc.value.code == Code.DATASET_SPLIT_AMBIGUOUS
+    assert "backup/train.jsonl" in exc.value.details["strays"]["train.jsonl"]
+
+
+def test_a_nested_validation_alias_is_also_ambiguous(tmp_path):
+    root = make_dataset_dir(tmp_path, ["train.jsonl", "validation.jsonl"])
+    nested = root / "old"
+    nested.mkdir()
+    (nested / "val.jsonl").write_text(TRAIN_LINE, encoding="utf-8")
+
+    with pytest.raises(DatasetError) as exc:
+        resolve_dataset(root, workdir=tmp_path / "work")
+    assert exc.value.code == Code.DATASET_SPLIT_AMBIGUOUS
+
+
+def test_macosx_metadata_copies_are_not_treated_as_strays(tmp_path):
+    """Archives from macOS routinely carry __MACOSX shadows; those are noise, not data."""
+    root = make_dataset_dir(tmp_path, ["train.jsonl"])
+    shadow = root / "__MACOSX"
+    shadow.mkdir()
+    (shadow / "train.jsonl").write_text("", encoding="utf-8")
+
+    resolved = resolve_dataset(root, workdir=tmp_path / "work")
+    assert resolved.splits["train"].parent == root
+
+
+def test_unrelated_nested_files_do_not_trigger_the_stray_check(tmp_path):
+    root = make_dataset_dir(tmp_path, ["train.jsonl"])
+    nested = root / "notes"
+    nested.mkdir()
+    (nested / "README.md").write_text("hello", encoding="utf-8")
+    (nested / "extra.jsonl").write_text(TRAIN_LINE, encoding="utf-8")
+
+    resolved = resolve_dataset(root, workdir=tmp_path / "work")
+    assert set(resolved.splits) == {"train"}

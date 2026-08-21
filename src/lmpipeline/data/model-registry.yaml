@@ -33,10 +33,15 @@ models:
     serving_profile: peft_adapter
     approval_state: experimental
     resource_profile:
-      # UNMEASURED. Populate from a real run on approved DIMER hardware before
-      # promoting approval_state past `experimental`. See TRAINING_SPEC.md.
-      min_vram_gb: null
-      measured_on: null
+      # Measured. See COMPATIBILITY.md for method and caveats.
+      lora:
+        # Exceeded this 11.94 GB GPU (16.29 GB peak, driver spilled to host RAM at
+        # 30 tok/s vs 341 for qlora). Not a valid measurement — needs a larger GPU.
+        min_vram_gb: null
+        measured_on: null
+      qlora:
+        min_vram_gb: 9.3
+        measured_on: "RTX 5070 Ti Laptop 11.94GB, seq2048 bs1, 2026-08-21"
 
   qwen3-4b:
     enabled: true
@@ -54,8 +59,13 @@ models:
     serving_profile: peft_adapter
     approval_state: experimental
     resource_profile:
-      min_vram_gb: null
-      measured_on: null
+      lora:
+        # Out of memory on this 11.94 GB GPU. Needs measurement on larger hardware.
+        min_vram_gb: null
+        measured_on: null
+      qlora:
+        min_vram_gb: 11.5
+        measured_on: "RTX 5070 Ti Laptop 11.94GB, seq2048 bs1, 2026-08-21"
 
   granite-4.1-3b:
     # P1 abstraction proof. Adding this model must not require a forked trainer.
@@ -75,8 +85,13 @@ models:
     serving_profile: peft_adapter
     approval_state: experimental
     resource_profile:
-      min_vram_gb: null
-      measured_on: null
+      lora:
+        # Exceeded this GPU (24.35 GB peak, spilled, 9.1 tok/s vs 185 for qlora).
+        min_vram_gb: null
+        measured_on: null
+      qlora:
+        min_vram_gb: 8.7
+        measured_on: "RTX 5070 Ti Laptop 11.94GB, seq2048 bs1, 2026-08-21"
 
   qwen3-0.6b:
     # CI / GPU smoke-test model. Not offered to end users: absent from the
@@ -97,8 +112,13 @@ models:
     serving_profile: peft_adapter
     approval_state: experimental
     resource_profile:
-      min_vram_gb: null
-      measured_on: null
+      lora:
+        # Fits, but only just: 11.89 GB reserved of 11.94 GB available.
+        min_vram_gb: 13.3
+        measured_on: "RTX 5070 Ti Laptop 11.94GB, seq2048 bs1, 2026-08-21"
+      qlora:
+        min_vram_gb: null
+        measured_on: null
 
   phi-4-mini-instruct:
     # DISABLED. microsoft/Phi-4-mini-instruct carries the `custom_code` tag on the Hub and
@@ -119,5 +139,7 @@ models:
     serving_profile: peft_adapter
     approval_state: blocked
     resource_profile:
-      min_vram_gb: null
-      measured_on: null
+      # Disabled entry; never measured.
+      lora:
+        min_vram_gb: null
+        measured_on: null

@@ -24,13 +24,41 @@ DEFAULT_REGISTRY_PATH = Path(__file__).resolve().parent / "data" / "model-regist
 
 
 @dataclass(frozen=True)
-class ResourceProfile:
+class MethodProfile:
+    """Measured requirement for one (model, training method) pair.
+
+    Per method, not per model: a 4-bit QLoRA run and a bf16 LoRA run of the same model can
+    differ by more than 2x, so a single per-model number would either block QLoRA on a GPU
+    where it fits, or admit a LoRA run that cannot.
+    """
+
     min_vram_gb: float | None = None
     measured_on: str | None = None
 
     @property
     def is_measured(self) -> bool:
         return self.min_vram_gb is not None and self.measured_on is not None
+
+
+@dataclass(frozen=True)
+class ResourceProfile:
+    """Per-method measured profiles for one model."""
+
+    methods: dict[str, MethodProfile] = field(default_factory=dict)
+
+    def for_method(self, method: str) -> MethodProfile:
+        return self.methods.get(method, MethodProfile())
+
+    @property
+    def is_measured(self) -> bool:
+        """True only when every declared method carries a real measurement."""
+        return bool(self.methods) and all(p.is_measured for p in self.methods.values())
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            method: {"minVramGb": p.min_vram_gb, "measuredOn": p.measured_on}
+            for method, p in sorted(self.methods.items())
+        }
 
 
 @dataclass(frozen=True)
@@ -120,8 +148,13 @@ class ModelRegistry:
                 enabled=bool(spec.get("enabled", False)),
                 internal_only=bool(spec.get("internal_only", False)),
                 resource_profile=ResourceProfile(
-                    min_vram_gb=rp.get("min_vram_gb"),
-                    measured_on=rp.get("measured_on"),
+                    methods={
+                        method: MethodProfile(
+                            min_vram_gb=(spec or {}).get("min_vram_gb"),
+                            measured_on=(spec or {}).get("measured_on"),
+                        )
+                        for method, spec in (rp or {}).items()
+                    }
                 ),
             )
         return cls(entries, schema_version=str(raw.get("schema_version", "1.0")))

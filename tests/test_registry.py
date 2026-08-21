@@ -79,11 +79,40 @@ def test_base_model_mismatch_fails_rather_than_training_wrong_model(registry):
     assert exc.value.code == Code.MODEL_BASE_MODEL_CONFLICT
 
 
-def test_resource_profiles_are_honestly_unmeasured(registry):
-    """Guards the 'do not publish guessed VRAM' rule.
+def test_resource_profiles_are_per_method(registry):
+    """A single per-model number cannot express "qlora fits, lora does not"."""
+    entry = registry.resolve("qwen3-1.7b")
+    assert entry.resource_profile.for_method("qlora").min_vram_gb == 9.3
+    # LoRA exceeded the measurement GPU and spilled, so it carries no number.
+    assert entry.resource_profile.for_method("lora").min_vram_gb is None
+    # An undeclared method resolves to an empty profile rather than raising.
+    assert entry.resource_profile.for_method("full").min_vram_gb is None
 
-    When a profile is later measured this test should be updated to assert it is measured,
-    not deleted.
-    """
+
+def test_every_measured_number_names_its_hardware(registry):
+    """A profile without provenance is indistinguishable from a guess."""
     for key in registry.keys():
-        assert registry.resolve(key).resource_profile.is_measured is False
+        profile = registry.resolve(key).resource_profile
+        for method, method_profile in profile.methods.items():
+            if method_profile.min_vram_gb is not None:
+                assert method_profile.measured_on, (
+                    f"{key}/{method} has a VRAM number but no measured_on"
+                )
+            else:
+                assert method_profile.measured_on is None, (
+                    f"{key}/{method} claims hardware but records no measurement"
+                )
+
+
+def test_unmeasured_combinations_stay_null(registry):
+    """Spilled and OOM runs must not become numbers.
+
+    qwen3-4b LoRA ran out of memory and granite LoRA spilled to host RAM; neither is a
+    valid measurement, so both stay null until measured on hardware that fits them.
+    """
+    assert registry.resolve("qwen3-4b").resource_profile.for_method(
+        "lora"
+    ).min_vram_gb is None
+    assert registry.resolve("granite-4.1-3b").resource_profile.for_method(
+        "lora"
+    ).min_vram_gb is None

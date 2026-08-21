@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import stat
 import zipfile
 from pathlib import Path
 
@@ -22,7 +24,7 @@ from lmpipeline.datasets.normalize import (
 from lmpipeline.datasets.resolver import safe_extract_zip
 from lmpipeline.dimer import DimerEnv, notify_done_callback
 from lmpipeline.errors import Code, DatasetError, PipelineError, Stage
-from lmpipeline.result import Result
+from lmpipeline.result import RESULT_FILE_MODE, Result, write_result
 
 # -- 1. Result.from_exception collided on `details` ---------------------------
 
@@ -220,3 +222,23 @@ def test_fixture_paths_are_untouched(tmp_path: Path):
     examples = list(iter_examples(path))
     assert [e.line_number for e in examples] == [1, 3]
     assert examples[1].assistant_text == "d"
+
+
+# -- 8. result.json was written 0600 and unreadable by the platform ------------
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes are not meaningful on Windows")
+def test_result_json_is_world_readable(tmp_path):
+    """mkstemp creates 0600 and os.replace preserves it.
+
+    DIMER's backend collects result.json off a shared mount as a different uid than the
+    Job container, so a 0600 result reads as "the run produced nothing". Caught by running
+    the real container, not by any unit test.
+    """
+    target = tmp_path / "result.json"
+    write_result(
+        Result.success(stage=Stage.VALIDATION, message="ok", code=Code.VALIDATION_SUCCEEDED),
+        target,
+    )
+    assert stat.S_IMODE(target.stat().st_mode) == RESULT_FILE_MODE
+    assert stat.S_IMODE(target.stat().st_mode) & stat.S_IROTH

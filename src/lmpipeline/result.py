@@ -23,6 +23,10 @@ from .errors import Code, PipelineError
 
 SCHEMA_VERSION = "1.0"
 
+# result.json must be readable by the platform process that collects it, which runs as a
+# different uid than the Job container. World-readable, owner-writable.
+RESULT_FILE_MODE = 0o644
+
 
 @dataclass
 class Check:
@@ -145,6 +149,11 @@ def write_result(result: Result, path: Path | str) -> Path:
             fh.write(payload)
             fh.flush()
             os.fsync(fh.fileno())
+        # mkstemp creates 0600 and os.replace preserves it. DIMER's backend reads this file
+        # off a shared mount, typically as a different uid than the Job container, so a
+        # 0600 result is invisible to the platform — the run looks like it produced
+        # nothing. This file is a status document, not a secret.
+        os.chmod(tmp_name, RESULT_FILE_MODE)
         os.replace(tmp_name, path)
     except BaseException:
         Path(tmp_name).unlink(missing_ok=True)

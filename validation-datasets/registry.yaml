@@ -1,0 +1,131 @@
+# Validation dataset registry.
+#
+# Source metadata verified against the Hub on 2026-08-21 and posted to issue #2. Every
+# revision below is a real commit SHA, not a branch: an acceptance dataset that moves when
+# upstream `main` moves is not acceptance data.
+#
+# `redistribution` is the field that decides whether converted rows may be committed to this
+# repository. "unclear" and "no" both mean: commit the recipe and the digest, never the rows.
+
+schema_version: "1.0"
+
+sources:
+  dolly-15k:
+    provider: databricks
+    source_type: huggingface
+    source_id: databricks/databricks-dolly-15k
+    revision: bdd27f4d94b9c1f951818a7da7fd7aeea5dbff1a
+    config: default
+    split: train
+    license: CC-BY-SA-3.0
+    license_url: https://huggingface.co/datasets/databricks/databricks-dolly-15k
+    gated: false
+    redistribution: share_alike        # CC-BY-SA: derivatives must carry the same licence
+    intended_use: [sft_smoke]
+    languages: [en]
+    source_schema: {instruction: str, context: str, response: str, category: str}
+    canonical_schema: messages
+    conversion_version: 1
+    verified_on: "2026-08-21"
+    approval_state: experimental
+    profiles:
+      smoke_100: {count: 100, selection: stable_hash}
+      smoke_500: {count: 500, selection: stable_hash}
+
+  uner-tagalog:
+    provider: universalner
+    source_type: huggingface
+    source_id: universalner/uner_llm_inst_tagalog
+    revision: f8f207c25f3b29abfe6a2d0a3f094b99294ad35c
+    config: default
+    # NOTE: the ONLY split upstream publishes is `test`. There is no train split. Training
+    # on it is a deliberate choice, recorded here so a later reader does not mistake this
+    # for a training corpus. See issue #2 comment, correction 1.
+    split: test
+    license: CC-BY-SA-4.0
+    license_url: https://huggingface.co/datasets/universalner/uner_llm_inst_tagalog
+    gated: false
+    redistribution: share_alike
+    intended_use: [filipino_acceptance]
+    languages: [tl]
+    source_schema: {inputs: str, targets: str}
+    canonical_schema: messages
+    conversion_version: 1
+    verified_on: "2026-08-21"
+    approval_state: experimental
+    # This dataset is a conversion of the Tagalog portion of Universal NER v1, and
+    # `uner-multilingual` is a conversion of the same v1 corpus including `tl`. Treat the
+    # two as OVERLAPPING until a disjointness check proves otherwise.
+    overlaps_with: [uner-multilingual]
+    profiles:
+      full: {count: 220, selection: all}
+
+  uner-multilingual:
+    provider: universalner
+    source_type: huggingface
+    source_id: universalner/uner_llm_instructions
+    revision: dc9e8b0f7aa1d3a9a44a14e8f4c868e2bb4f19b5
+    config: default
+    split: train
+    license: CC-BY-SA-4.0
+    license_url: https://huggingface.co/datasets/universalner/uner_llm_instructions
+    gated: false
+    redistribution: share_alike
+    intended_use: [multilingual_acceptance]
+    languages: [ceb, da, de, en, hr, pt, ru, sk, sr, sv, tl, zh]
+    source_schema: {inputs: str, targets: str}
+    canonical_schema: messages
+    conversion_version: 1
+    verified_on: "2026-08-21"
+    approval_state: experimental
+    overlaps_with: [uner-tagalog]
+    profiles:
+      multi_500: {count: 500, selection: stable_hash}
+      multi_2000: {count: 2000, selection: stable_hash}
+
+  sea-instruct-2602:
+    provider: aisingapore
+    source_type: huggingface
+    source_id: aisingapore/SEA-Instruct-2602
+    revision: db7ffdd92ce4e1740de14206da72b6f799790a07
+    config: null
+    split: null
+    license: ODC-BY                    # verified 2026-08-21; carries attribution duties
+    license_url: https://huggingface.co/datasets/aisingapore/SEA-Instruct-2602
+    gated: true
+    redistribution: unclear            # commit recipes and digests only, never rows
+    intended_use: [multilingual_acceptance]
+    languages: [en, id, vi, th, ta, tl, ms, my, km, lo, zh]
+    source_schema: null                # not inspectable without accepting upstream terms
+    canonical_schema: messages
+    conversion_version: 0
+    verified_on: "2026-08-21"
+    # DISABLED: requires terms acceptance, and 1M-10M rows needs an agreed subsetting
+    # policy before any profile is defined. Never a required CI dependency.
+    enabled: false
+    approval_state: blocked
+    profiles: {}
+
+  kalahi:
+    provider: aisingapore
+    source_type: huggingface
+    source_id: aisingapore/Cultural-Evaluation-Kalahi
+    revision: 236decdf946498dd5f1c4efa270ba169fe725ad3
+    config: null
+    split: null
+    license: CC-BY-4.0
+    license_url: https://huggingface.co/datasets/aisingapore/Cultural-Evaluation-Kalahi
+    gated: true                        # the spec omitted this; it is gated
+    redistribution: unclear
+    # EVALUATION ONLY. Never an SFT training profile, and never overlapping one.
+    intended_use: [evaluation_only]
+    languages: [tl]
+    # The MCQ-compatible SEA-HELM variant, so an evaluation loader is multiple-choice,
+    # not free-form reference answers.
+    source_schema: null
+    canonical_schema: evaluation
+    conversion_version: 0
+    verified_on: "2026-08-21"
+    enabled: false                     # requires terms acceptance
+    approval_state: blocked
+    profiles: {}

@@ -18,6 +18,31 @@ from .errors import Code, ModelError
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
+# -- Base Model tier sentinels -------------------------------------------------
+#
+# DIMER's Pipeline Builder requires a Base Model value, and that value never reaches the
+# Job (DEPLOYMENT.md). A registration that names a real model therefore makes a claim the
+# runtime cannot verify and the user can contradict: `model_key` selects the model that
+# actually trains, so a row reading "Qwen3-1.7B" can end up describing a Granite run with
+# nothing able to detect it. Stored provenance that is silently wrong is worse than stored
+# provenance that is deliberately abstract.
+#
+# So a GPU-tier registration puts a sentinel in the field instead — it names the tier, never
+# a model, and cannot be falsified by any `model_key` choice. The model that actually ran is
+# recorded where it is machine-verifiable: the artifact manifest and the result document.
+BASE_MODEL_TIER_PREFIX = "lm-sft-"
+
+
+def is_tier_sentinel(value: str | None) -> bool:
+    """True when a Base Model value names a GPU tier rather than a model."""
+    return bool(value) and value.strip().lower().startswith(BASE_MODEL_TIER_PREFIX)
+
+
+def tier_sentinel(tier: str) -> str:
+    """Build the Base Model value for a GPU-tier registration, e.g. `lm-sft-12gb-qlora`."""
+    slug = tier.strip().lower().replace(" ", "-")
+    return slug if slug.startswith(BASE_MODEL_TIER_PREFIX) else BASE_MODEL_TIER_PREFIX + slug
+
 # The registry ships inside the package so a vendored copy cannot drift from the code
 # that reads it. See scripts/vendor_sync.py.
 DEFAULT_REGISTRY_PATH = Path(__file__).resolve().parent / "data" / "model-registry.yaml"
@@ -258,6 +283,11 @@ class ModelRegistry:
         """
         if not base_model:
             return None
+        if is_tier_sentinel(base_model):
+            # A tier sentinel makes no claim about which model ran, so there is nothing to
+            # contradict. Returning it unchanged keeps the registration's own value in the
+            # result document without promoting it to provenance.
+            return base_model.strip()
         if base_model.strip() != entry.model_id:
             raise ModelError(
                 f"DIMER Base Model {base_model!r} does not match the resolved registry "

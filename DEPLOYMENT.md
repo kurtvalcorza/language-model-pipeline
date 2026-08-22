@@ -53,6 +53,42 @@ delivering the Pipeline Builder's *Base Model* field to a Job:
 When the platform does supply it, `ModelRegistry.reconcile_base_model` asserts agreement and
 fails on conflict rather than training the wrong model.
 
+### What to enter in Base Model for a GPU-tier registration
+
+The field is mandatory in the Pipeline Builder, so "leave it blank" is not available. The
+rule is: **a tier registration's Base Model names the tier, never a model.**
+
+```
+Base Model:  lm-sft-12gb-qlora
+```
+
+The `lm-sft-` prefix is recognized by `lmpipeline.registry.is_tier_sentinel`, and
+`tier_sentinel("12gb-qlora")` builds the value. Construct one per registered GPU tier.
+
+Why not name the real model, which looks more honest: because nothing can keep it honest.
+`model_key` chooses the model that actually trains, and Base Model never reaches the Job, so
+a registration reading `Qwen/Qwen3-1.7B` can describe a run that trained Granite with no
+mechanism able to detect the divergence — not `reconcile_base_model`, which only fires if
+the platform delivers the field, and not the operator, who sees a plausible row. Registering
+one pipeline per model does not fix this either: `dimer-pipeline.json` is per **image**, not
+per registration, so its `model_key` enum still offers every model regardless of which
+registration the user started from. Only one image per model would close it, and that gives
+up the model-agnostic design this repo exists to provide.
+
+A sentinel cannot be falsified, because it asserts nothing about the model. The model that
+actually ran is recorded where it is machine-verifiable and hash-covered:
+
+| Where | Field |
+|---|---|
+| `result.json` | `metadata.languageModelPipeline.model` (id + pinned revision) |
+| `artifact-manifest.json` | every published file, by SHA-256 |
+| `MODEL_CARD.md` | model id, revision, method, measured metrics |
+
+`reconcile_base_model` treats a sentinel as "no claim" and returns it unchanged, so runs keep
+working if DIMER later starts delivering the field. A **real** model id that disagrees with
+the resolved entry still fails with `MODEL_BASE_MODEL_CONFLICT` — the sentinel path is not a
+hole that swallows genuine conflicts.
+
 Why `datasetPreprocessing` and not `modelFinetuning`: it is the only user-parameter channel
 proven to reach **both** containers. Shipped Mitra's validator consumes
 `DIMER_PREPROCESSING_ARGS_JSON` (`validator.py:245`) for `target_column`, which is declared

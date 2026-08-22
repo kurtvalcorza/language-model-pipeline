@@ -11,6 +11,7 @@ from lmpipeline.datasets.normalize import (
     FAMILY_PROMPT_COMPLETION,
     detect_family,
     iter_examples,
+    load_examples,
 )
 from lmpipeline.errors import Code, DatasetError
 
@@ -129,3 +130,65 @@ def test_error_messages_never_embed_record_content(tmp_path):
         list(iter_examples(path))
     assert secret not in str(exc.value)
     assert secret not in json.dumps(exc.value.details)
+
+
+# -- bounded materialization ---------------------------------------------------
+
+
+def _write_lines(path: Path, count: int) -> Path:
+    path.write_text(
+        "".join(
+            json.dumps({"prompt": f"q{i}", "completion": f"a{i}"}) + "\n"
+            for i in range(count)
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_load_examples_returns_everything_under_the_cap(tmp_path):
+    path = _write_lines(tmp_path / "train.jsonl", 5)
+    assert len(load_examples(path, max_examples=10)) == 5
+
+
+def test_a_split_exactly_at_the_cap_is_accepted(tmp_path):
+    """Off-by-one here would reject the largest dataset the policy says is legal."""
+    path = _write_lines(tmp_path / "train.jsonl", 10)
+    assert len(load_examples(path, max_examples=10)) == 10
+
+
+def test_one_example_past_the_cap_fails_structurally(tmp_path):
+    path = _write_lines(tmp_path / "train.jsonl", 11)
+    with pytest.raises(DatasetError) as exc:
+        load_examples(path, max_examples=10)
+    assert exc.value.code == Code.DATASET_TOO_MANY_EXAMPLES
+    assert exc.value.details["maximum"] == 10
+
+
+def test_the_cap_stops_reading_rather_than_counting_first(tmp_path):
+    """The property that matters: memory is bounded by the cap, not by the file.
+
+    If the implementation ever goes back to materializing and then checking, this test
+    still passes on size but the allocation is unbounded — so assert on the generator
+    instead, which can only be partially consumed if the raise happened mid-stream.
+    """
+    consumed = 0
+
+    def counting_source():
+        nonlocal consumed
+        for item in iter_examples(path):
+            consumed += 1
+            yield item
+
+    path = _write_lines(tmp_path / "train.jsonl", 500)
+    import lmpipeline.datasets.normalize as normalize_module
+
+    original = normalize_module.iter_examples
+    normalize_module.iter_examples = lambda _p: counting_source()
+    try:
+        with pytest.raises(DatasetError):
+            load_examples(path, max_examples=10)
+    finally:
+        normalize_module.iter_examples = original
+
+    assert consumed == 11, f"read {consumed} examples to enforce a cap of 10"

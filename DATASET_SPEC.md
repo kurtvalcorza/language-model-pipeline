@@ -13,6 +13,45 @@ rather than its contents. A zip containing another zip is rejected with a dedica
 actionable message (`DATASET_ARCHIVE_NESTED`); the Portal documents this as a common user
 error. Two or more archives is ambiguous and fails.
 
+## Resource bounds
+
+Ingestion is bounded **before** any row is parsed, because a dataset that is merely
+transport-valid can still be large enough to exhaust RAM. An OOM kill is the one failure the
+contract cannot report on: the Job dies without writing a result document, so the user sees
+an infrastructure error rather than a reason.
+
+| Bound | Value | Applies to | Override |
+|---|---|---|---|
+| `MAX_SPLIT_BYTES` | 512 MiB | each resolved split file | `LM_MAX_SPLIT_BYTES` |
+| `MAX_DATASET_BYTES` | 1 GiB | all splits together | `LM_MAX_DATASET_BYTES` |
+| `MAX_MEMBER_BYTES` | = `MAX_SPLIT_BYTES` | each archive member | follows |
+| `MAX_UNCOMPRESSED_BYTES` | = `MAX_DATASET_BYTES` | total archive expansion | follows |
+| `MAX_LINE_BYTES` | 4 MiB | one record | — |
+
+> **The two byte values are provisional (issue #11).** The agreed policy is to set them to
+> DIMER's documented maximum upload size, so this pipeline never rejects a dataset the
+> platform itself accepted. That quota has not been read out of the portal yet, and putting
+> an invented number in a shared contract is the failure mode COMPATIBILITY.md exists to
+> prevent. They are conservative in the meantime and overridable by environment variable, so
+> setting the real quota needs no code change.
+
+Two rules follow, and both are load-bearing:
+
+- **The byte bounds apply to mounted directories, not only archives.** Archive members carry
+  metadata that can be checked cheaply; a mounted directory carries none, and DIMER mounts
+  whatever the user uploaded. Bounding only the archive path leaves the directory path
+  completely open. Violations raise `DATASET_SPLIT_TOO_LARGE`.
+- **Consumers must not materialize a split unbounded.** `iter_examples` streams, but every
+  consumer needs the examples more than once, so each one reached for `list(...)` — which
+  restores the unbounded allocation the streaming reader exists to prevent, and defers the
+  example-count policy until after the allocation it was supposed to guard. Use
+  `load_examples(path, max_examples=...)`, which raises `DATASET_TOO_MANY_EXAMPLES` on the
+  example that would exceed the cap. Peak memory is then bounded by the cap, not by the file.
+
+Archive bounds are aligned to the split bounds deliberately: if a member limit were looser
+than the split limit, the pipeline would pay to extract bytes that split resolution then
+rejects.
+
 ## Split resolution
 
 | Split | Filename | Required |

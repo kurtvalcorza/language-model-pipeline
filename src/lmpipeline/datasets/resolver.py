@@ -7,6 +7,7 @@ rather than being reimplemented per repo.
 
 from __future__ import annotations
 
+import os
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -22,10 +23,45 @@ SPLIT_CANDIDATES: dict[str, tuple[str, ...]] = {
 }
 REQUIRED_SPLITS = ("train",)
 
-# Archive bounds. Deliberately conservative; override per deployment, never remove.
-MAX_COMPRESSED_BYTES = 2 * 1024**3
-MAX_UNCOMPRESSED_BYTES = 8 * 1024**3
-MAX_MEMBER_BYTES = 4 * 1024**3
+# Ingestion bounds, in one place because both consumers must fail at the same size.
+#
+# These are deliberately far below "what fits in RAM". Both consumers hold parsed examples
+# in memory, and the finetuner additionally holds a tokenized copy, so the peak is a
+# multiple of the file size. A dataset that is merely transport-valid must fail with a
+# stable code, not by having the kernel OOM-kill the Job — an OOM kill produces no result
+# document at all, which is the one outcome the contract cannot report on.
+#
+# PENDING (issue #11): these are provisional. The agreed policy is to set them to DIMER's
+# documented maximum upload size, so this pipeline never rejects a dataset the platform
+# itself accepted. That quota has not been read out of the portal yet, and inventing a
+# number here would be exactly the kind of unmeasured constant COMPATIBILITY.md forbids.
+# Until then they are conservative and overridable per deployment — no code change needed.
+
+
+def _bound_from_env(name: str, default: int) -> int:
+    """Read a byte bound from the environment, falling back to the conservative default.
+
+    Overridable because the correct value is a property of the deployment's upload quota,
+    not of this source file.
+    """
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+MAX_SPLIT_BYTES = _bound_from_env("LM_MAX_SPLIT_BYTES", 512 * 1024**2)
+MAX_DATASET_BYTES = _bound_from_env("LM_MAX_DATASET_BYTES", 1024**3)
+
+# Archive bounds. Aligned to the split bounds above so an archive cannot smuggle in a
+# member that split resolution would then have to reject after paying to extract it.
+MAX_COMPRESSED_BYTES = MAX_DATASET_BYTES
+MAX_UNCOMPRESSED_BYTES = MAX_DATASET_BYTES
+MAX_MEMBER_BYTES = MAX_SPLIT_BYTES
 MAX_MEMBERS = 10_000
 MAX_COMPRESSION_RATIO = 200.0
 
@@ -36,6 +72,7 @@ class ResolvedDataset:
     splits: dict[str, Path]
     source: str  # "directory" | "zip"
     archive: str | None = None
+    total_bytes: int = 0
 
     @property
     def has_validation(self) -> bool:
@@ -238,6 +275,39 @@ def _reject_stray_split_files(root: Path) -> None:
         )
 
 
+def enforce_split_bounds(splits: dict[str, Path]) -> int:
+    """Bound resolved splits by byte size, and return the aggregate.
+
+    Runs for directory and archive inputs alike. The archive path already bounds members,
+    but a mounted directory carries no metadata to bound — DIMER mounts whatever the user
+    uploaded — so without this a multi-gigabyte `train.jsonl` reaches the consumers with
+    nothing standing between it and a materializing read.
+
+    Checked with stat() before a single byte is parsed: the point is to fail structurally
+    while failing is still cheap.
+    """
+    total = 0
+    for name in sorted(splits):
+        path = splits[name]
+        size = path.stat().st_size
+        if size > MAX_SPLIT_BYTES:
+            raise DatasetError(
+                f"Split {name!r} ({path.name}) is {size} bytes, above the "
+                f"{MAX_SPLIT_BYTES} byte per-split limit.",
+                code=Code.DATASET_SPLIT_TOO_LARGE,
+                details={"split": name, "bytes": size, "maximum": MAX_SPLIT_BYTES},
+            )
+        total += size
+    if total > MAX_DATASET_BYTES:
+        raise DatasetError(
+            f"The dataset totals {total} bytes across its splits, above the "
+            f"{MAX_DATASET_BYTES} byte limit.",
+            code=Code.DATASET_SPLIT_TOO_LARGE,
+            details={"bytes": total, "maximum": MAX_DATASET_BYTES},
+        )
+    return total
+
+
 def resolve_dataset(dataset_dir: Path, *, workdir: Path) -> ResolvedDataset:
     """Resolve canonical split files from DIMER's mounted dataset directory."""
     dataset_dir = Path(dataset_dir)
@@ -292,4 +362,8 @@ def resolve_dataset(dataset_dir: Path, *, workdir: Path) -> ResolvedDataset:
                 details={"split": split, "expected": list(SPLIT_CANDIDATES[split])},
             )
 
-    return ResolvedDataset(root=root, splits=splits, source=source, archive=archive)
+    total_bytes = enforce_split_bounds(splits)
+
+    return ResolvedDataset(
+        root=root, splits=splits, source=source, archive=archive, total_bytes=total_bytes
+    )

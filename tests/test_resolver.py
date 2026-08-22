@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from lmpipeline.datasets import resolver
 from lmpipeline.datasets.resolver import resolve_dataset, safe_extract_zip
 from lmpipeline.errors import Code, DatasetError
 
@@ -229,3 +230,70 @@ def test_unrelated_nested_files_do_not_trigger_the_stray_check(tmp_path):
 
     resolved = resolve_dataset(root, workdir=tmp_path / "work")
     assert set(resolved.splits) == {"train"}
+
+
+# -- ingestion bounds ----------------------------------------------------------
+#
+# Sized down via monkeypatch rather than by writing half a gigabyte to tmp_path: the
+# behaviour under test is "stat, compare, raise before parsing", which is independent of
+# the constant's real value.
+
+
+def test_an_oversized_split_in_a_mounted_directory_is_rejected(tmp_path, monkeypatch):
+    """The gap a zip cannot cover: DIMER mounts a directory with no metadata to bound."""
+    monkeypatch.setattr(resolver, "MAX_SPLIT_BYTES", 64)
+    root = make_dataset_dir(tmp_path, ["train.jsonl"])
+    (root / "train.jsonl").write_text(TRAIN_LINE * 40, encoding="utf-8")
+
+    with pytest.raises(DatasetError) as exc:
+        resolve_dataset(root, workdir=tmp_path / "work")
+    assert exc.value.code == Code.DATASET_SPLIT_TOO_LARGE
+    assert exc.value.details["split"] == "train"
+
+
+def test_splits_that_are_individually_legal_can_still_be_too_much_together(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(resolver, "MAX_SPLIT_BYTES", 1024)
+    monkeypatch.setattr(resolver, "MAX_DATASET_BYTES", 100)
+    root = make_dataset_dir(tmp_path, ["train.jsonl", "validation.jsonl", "test.jsonl"])
+    for name in ("train.jsonl", "validation.jsonl", "test.jsonl"):
+        (root / name).write_text(TRAIN_LINE * 2, encoding="utf-8")
+
+    with pytest.raises(DatasetError) as exc:
+        resolve_dataset(root, workdir=tmp_path / "work")
+    assert exc.value.code == Code.DATASET_SPLIT_TOO_LARGE
+    assert "split" not in exc.value.details  # the aggregate failed, not one file
+
+
+def test_bounds_are_enforced_for_archives_too(tmp_path, monkeypatch):
+    monkeypatch.setattr(resolver, "MAX_SPLIT_BYTES", 64)
+    root = tmp_path / "dataset"
+    root.mkdir()
+    with zipfile.ZipFile(root / "data.zip", "w") as zf:
+        zf.writestr("train.jsonl", TRAIN_LINE * 40)
+
+    with pytest.raises(DatasetError) as exc:
+        resolve_dataset(root, workdir=tmp_path / "work")
+    assert exc.value.code in {
+        Code.DATASET_SPLIT_TOO_LARGE, Code.DATASET_ARCHIVE_TOO_LARGE
+    }
+
+
+def test_a_dataset_within_bounds_reports_its_size(tmp_path):
+    """Aggregate across splits, taken from stat() rather than from the text written.
+
+    Asserting against `len(TRAIN_LINE)` instead looks equivalent and is not: on Windows
+    the text-mode write turns each LF into CRLF, so the on-disk size is larger than the
+    string. The bound is about bytes on disk, so the test measures bytes on disk.
+    """
+    root = make_dataset_dir(tmp_path, ["train.jsonl", "validation.jsonl"])
+    resolved = resolve_dataset(root, workdir=tmp_path / "work")
+    expected = sum(p.stat().st_size for p in resolved.splits.values())
+    assert resolved.total_bytes == expected > 0
+
+
+def test_the_archive_member_bound_matches_the_split_bound():
+    """Two limits that disagree mean paying to extract bytes the next step rejects."""
+    assert resolver.MAX_MEMBER_BYTES == resolver.MAX_SPLIT_BYTES
+    assert resolver.MAX_UNCOMPRESSED_BYTES <= resolver.MAX_DATASET_BYTES

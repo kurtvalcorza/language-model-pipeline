@@ -37,6 +37,10 @@ class Code:
     # -- split resolution ------------------------------------------------------
     DATASET_SPLIT_MISSING = "DATASET_SPLIT_MISSING"
     DATASET_SPLIT_AMBIGUOUS = "DATASET_SPLIT_AMBIGUOUS"
+    # A split that is transport-valid but too large to ingest. Distinct from
+    # DATASET_ARCHIVE_TOO_LARGE: this one also fires for mounted directories, which carry
+    # no archive metadata to bound.
+    DATASET_SPLIT_TOO_LARGE = "DATASET_SPLIT_TOO_LARGE"
 
     # -- record-level schema ---------------------------------------------------
     DATASET_INVALID_UTF8 = "DATASET_INVALID_UTF8"

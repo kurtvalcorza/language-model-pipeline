@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from lmpipeline.errors import Code, ModelError
-from lmpipeline.registry import ModelRegistry
+from lmpipeline.registry import ModelRegistry, is_tier_sentinel, tier_sentinel
 
 
 @pytest.fixture(scope="module")
@@ -116,3 +116,43 @@ def test_unmeasured_combinations_stay_null(registry):
     assert registry.resolve("granite-4.1-3b").resource_profile.for_method(
         "lora"
     ).min_vram_gb is None
+
+
+# -- Base Model tier sentinels -------------------------------------------------
+
+
+def test_a_tier_sentinel_is_recognized_and_a_model_id_is_not():
+    assert is_tier_sentinel("lm-sft-12gb-qlora")
+    assert is_tier_sentinel("LM-SFT-24GB-LoRA")  # the portal may normalize case
+    assert not is_tier_sentinel("Qwen/Qwen3-1.7B")
+    assert not is_tier_sentinel("")
+    assert not is_tier_sentinel(None)
+
+
+def test_tier_sentinel_builds_a_stable_value():
+    assert tier_sentinel("12gb-qlora") == "lm-sft-12gb-qlora"
+    assert tier_sentinel("12GB QLoRA") == "lm-sft-12gb-qlora"
+    # Already-prefixed input is not double-prefixed.
+    assert tier_sentinel("lm-sft-12gb-qlora") == "lm-sft-12gb-qlora"
+
+
+def test_a_sentinel_base_model_never_conflicts(registry):
+    """The whole point of the sentinel: it makes no model claim, so none can be wrong.
+
+    If this raised, every run under a GPU-tier registration would fail the moment DIMER
+    started delivering the field.
+    """
+    entry = registry.resolve("qwen3-1.7b")
+    assert registry.reconcile_base_model(entry, "lm-sft-12gb-qlora") == "lm-sft-12gb-qlora"
+    # ... and the same sentinel is equally valid for a different model in that tier.
+    assert registry.reconcile_base_model(
+        registry.resolve("granite-4.1-3b"), "lm-sft-12gb-qlora"
+    ) == "lm-sft-12gb-qlora"
+
+
+def test_a_real_model_id_that_disagrees_still_fails(registry):
+    """Sentinels must not become a hole that swallows genuine conflicts."""
+    entry = registry.resolve("qwen3-1.7b")
+    with pytest.raises(ModelError) as exc:
+        registry.reconcile_base_model(entry, "Qwen/Qwen3-4B")
+    assert exc.value.code == Code.MODEL_BASE_MODEL_CONFLICT

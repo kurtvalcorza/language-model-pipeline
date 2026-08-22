@@ -1,0 +1,14 @@
+# Line endings are load-bearing in this repository, so they are pinned rather than left to
+# each developer's core.autocrlf.
+#
+# The vendored copy of this package in the consumer repositories is verified by a tree hash
+# over file BYTES. With autocrlf=true, git rewrites checked-out files to CRLF, which changes
+# those bytes and makes the gate fail on Windows while passing on Linux CI — a false
+# positive that trains people to ignore a real drift check.
+* text=auto eol=lf
+
+# Fixture bytes ARE the contract: their digests are asserted, and the generator must
+# reproduce them byte for byte.
+*.jsonl -text
+*.zip binary
+validation-datasets/adversarial/expected-codes.json -text

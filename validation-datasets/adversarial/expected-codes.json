@@ -1,0 +1,22 @@
+{
+  "ambiguous-record-schema": "DATASET_SCHEMA_MIXED",
+  "duplicate-validation-alias": "DATASET_SPLIT_AMBIGUOUS",
+  "empty-assistant-target": "DATASET_TARGET_EMPTY",
+  "invalid-role": "DATASET_ROLE_INVALID",
+  "invalid-utf8": "DATASET_INVALID_UTF8",
+  "malformed-json": "DATASET_INVALID_JSON",
+  "missing-train-split": "DATASET_SPLIT_MISSING",
+  "mixed-schema-families": "DATASET_SCHEMA_MIXED",
+  "nested-duplicate-train": "DATASET_SPLIT_AMBIGUOUS",
+  "non-object-row": "DATASET_INVALID_JSON",
+  "two-archives": "DATASET_SPLIT_AMBIGUOUS",
+  "unknown-schema": "DATASET_SCHEMA_UNKNOWN",
+  "zero-examples": "DATASET_TOO_FEW_EXAMPLES",
+  "zip-absolute-path": "DATASET_ARCHIVE_UNSAFE",
+  "zip-bomb-ratio": "DATASET_ARCHIVE_UNSAFE",
+  "zip-drive-prefix": "DATASET_ARCHIVE_UNSAFE",
+  "zip-duplicate-members": "DATASET_ARCHIVE_DUPLICATE_MEMBER",
+  "zip-nested-archive": "DATASET_ARCHIVE_NESTED",
+  "zip-symlink-member": "DATASET_ARCHIVE_UNSAFE",
+  "zip-traversal": "DATASET_ARCHIVE_UNSAFE"
+}

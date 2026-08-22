@@ -19,6 +19,11 @@ dev = [
     "ruff>=0.6",
     "jsonschema>=4.20",
 ]
+# Only needed to FETCH pinned sources. The test suite deliberately does not require it:
+# CI must not depend on network access.
+fetch = [
+    "datasets>=3.0",
+]
 
 [tool.setuptools]
 package-dir = { "" = "src" }

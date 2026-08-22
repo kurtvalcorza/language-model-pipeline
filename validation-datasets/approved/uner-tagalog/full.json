@@ -1,0 +1,24 @@
+{
+  "approvedOn": "2026-08-22",
+  "conversionVersion": 1,
+  "datasetId": "uner-tagalog",
+  "excludeLanguages": [],
+  "fingerprintCount": 220,
+  "fingerprintDigest": "e2d2f748e0ec720dce42bab94ccfb8ceeacb8df9ddeeabbf1b03f1083573ba7a",
+  "packageSha256": "be8a6219e63fc13d592f1eff0142fec8972aed59c19dcf4091e20a1021a8bf04",
+  "pipelineUsage": "training",
+  "profile": "full",
+  "schemaVersion": "1.0",
+  "selectedSourceIndexCount": 220,
+  "selectedSourceIndexDigest": "cf44096b4886612f0fd14935b554ef0fc6414d6d479b8b3cbbf708256c3186a3",
+  "sourceId": "universalner/uner_llm_inst_tagalog",
+  "sourceRevision": "f8f207c25f3b29abfe6a2d0a3f094b99294ad35c",
+  "sourceSplit": "test",
+  "splits": {
+    "train": {
+      "exampleCount": 220,
+      "sha256": "277320d0c9954cfca9042f5d63dffaa019ff1e68b464ca22096ff9914f206516"
+    }
+  },
+  "toolVersion": "1.0"
+}

@@ -116,14 +116,45 @@ python -m validation_datasets disjoint uner-tagalog:full uner-multilingual:multi
 ```
 
 It compares committed fingerprint files, so it needs no network and no build, and CI can
-enforce it on every push. The filter itself fails closed: an unknown language field, a field
-missing from the fetched rows, or an exclusion that removes nothing all raise rather than
-building a "tier 3" profile that still contains Tagalog.
+enforce it on every push. **Live and passing:** tier 2 (220 examples) and tier 3 (500) are
+built, approved and committed, and share no canonical example.
 
-> **Tier 3 profiles cannot be built yet.** `language_field` for
-> `universalner/uner_llm_instructions` has not been confirmed against the pinned revision,
-> and `convert.py` does not guess field names. Until it is recorded, any tier-3 build fails
-> with an actionable error instead of producing a profile that silently skipped the filter.
+The filter itself fails closed: no usable exclusion mechanism, a field missing from the
+fetched rows, or a removal count that does not match the recorded expectation all raise
+rather than building a "tier 3" profile that still contains Tagalog.
+
+### How `tl` is excluded, given there is no language column
+
+Resolved 2026-08-22 by inspecting the pinned revision (issue #12). **Universal NER in the
+Aya format has no language column** — every row is just `inputs` and `targets`. A
+`language_field` filter was therefore impossible, and guessing a column name would have
+produced a filter that silently matched nothing.
+
+What the corpus does carry is a **per-language instruction preamble**, byte-identical across
+every row in that language. Danish rows all open `Angiv venligst alle navngivne enheder…`;
+Tagalog rows all open `Sa aktibidad na ito, kailangan mong hanapin…`. So the shared template
+of the single-language `uner-tagalog` corpus identifies Tagalog rows inside the multilingual
+one — including any that a fingerprint subtraction against its 220 rows would have missed.
+
+The template is derived, never hardcoded: 545 characters, computed as the longest common
+prefix across all 220 tier-2 rows, and rejected if it comes out shorter than 100.
+
+### Tier 3 is already Tagalog-free, and the filter still runs
+
+Measured across every split at the pinned revision:
+
+| split | rows | matching the Tagalog template |
+|---|---:|---:|
+| train | 54,957 | **0** |
+| validation | 7,788 | **0** |
+| test | 14,950 | **220** — exactly the tier-2 corpus |
+
+Tagalog lives only in `test`, and tier-3 profiles draw from `train`, so the tiers are
+disjoint upstream before any filtering. The exclusion still runs on **every** build, against
+an exact recorded expectation of `expected_removals: 0`. Exact in both directions: removing
+*more* than expected stops the build too, because it means upstream moved a language between
+splits and that should be a human decision rather than quietly becoming the new acceptance
+data.
 
 ### Tier 2 uses an upstream `test` split, deliberately
 

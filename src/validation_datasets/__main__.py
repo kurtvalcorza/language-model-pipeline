@@ -28,7 +28,13 @@ from .approval import (
 from .convert import CANONICAL_KEY_FIELDS, to_canonical
 from .package import build_manifest, sha256_file, write_canonical_jsonl, write_dimer_zip
 from .registry import DatasetRegistry, RegistryError
-from .subset import LanguageFilterError, drop_languages, select
+from .subset import (
+    LanguageFilterError,
+    derive_prompt_prefix,
+    drop_by_prompt_prefix,
+    drop_languages,
+    select,
+)
 
 OUTPUT_ROOT = (
     Path(__file__).resolve().parent.parent.parent / "validation-datasets" / "build"
@@ -72,6 +78,52 @@ def cmd_list(args) -> int:
     return 0
 
 
+def _apply_language_exclusion(registry, source, profile, rows: list[dict]) -> list[dict]:
+    """Remove excluded languages, by whichever mechanism the source actually supports.
+
+    Two mechanisms, tried in order of directness, and NO third fallback: if neither applies
+    the build fails rather than producing a profile whose declared exclusion did nothing.
+
+      1. A language column, when the source has one.
+      2. The instruction template of a known single-language source. Universal NER in the
+         Aya format has no language column at all — verified against the pinned revision,
+         issue #12 — but every row in a given language shares a byte-identical prompt
+         preamble, so a single-language corpus identifies its own rows inside the
+         multilingual one.
+    """
+    excluded = ", ".join(sorted(profile.exclude_languages))
+    before = len(rows)
+
+    if source.language_field:
+        kept = drop_languages(
+            rows, field=source.language_field,
+            exclude=profile.exclude_languages, dataset_id=source.id,
+        )
+        mechanism = f"language field {source.language_field!r}"
+    elif source.language_prefix_source:
+        donor = registry.get(source.language_prefix_source)
+        donor_rows = _fetch_rows(donor)
+        prefix = derive_prompt_prefix(
+            donor_rows, field=donor.prompt_field, dataset_id=donor.id
+        )
+        print(f"derived a {len(prefix)}-character prompt template from {donor.id} "
+              f"({len(donor_rows)} rows)")
+        kept = drop_by_prompt_prefix(
+            rows, field=source.prompt_field, prefix=prefix, dataset_id=source.id,
+            expected_removals=profile.expected_removals,
+        )
+        mechanism = f"prompt template from {donor.id}"
+    else:
+        raise LanguageFilterError(
+            f"{source.id!r} declares exclude_languages=[{excluded}] but supports no "
+            "exclusion mechanism: no `language_field`, no `language_prefix_source`. "
+            "Inspect the pinned source schema and record one; do not guess a field name."
+        )
+
+    print(f"excluded {excluded} via {mechanism}: {before} -> {len(kept)} rows")
+    return kept
+
+
 def cmd_build(args) -> int:
     registry = DatasetRegistry.load()
     source = registry.get(args.dataset)
@@ -92,13 +144,7 @@ def cmd_build(args) -> int:
     # Language exclusion runs BEFORE selection, so the profile's count is a count of rows
     # that survived the filter rather than a count taken before it.
     if profile.excludes_languages:
-        kept = drop_languages(
-            rows, field=source.language_field,
-            exclude=profile.exclude_languages, dataset_id=source.id,
-        )
-        print(f"excluded {', '.join(sorted(profile.exclude_languages))}: "
-              f"{len(rows)} -> {len(kept)} rows")
-        rows = kept
+        rows = _apply_language_exclusion(registry, source, profile, rows)
 
     key_fields = CANONICAL_KEY_FIELDS[source.id]
     chosen = select(

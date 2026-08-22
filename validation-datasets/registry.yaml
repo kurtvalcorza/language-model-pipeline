@@ -71,10 +71,15 @@ sources:
   uner-multilingual:
     tier: 3                            # Tier 3 — multilingual handling, independent of tl
     pipeline_usage: training
-    # Which row field carries the language code. UNVERIFIED against the pinned revision:
-    # until it is confirmed, any profile declaring exclude_languages fails closed rather
-    # than building a tier-3 profile that silently still contains Tagalog. See issue #6.
+    # RESOLVED 2026-08-22 (issue #12) by inspecting the pinned revision: this corpus has
+    # NO language column. Its rows are only `inputs` and `targets`.
     language_field: null
+    # What it does have is a per-language instruction preamble, byte-identical across every
+    # row in that language. `uner-tagalog` is the single-language Tagalog conversion of the
+    # same v1 corpus, so its shared template identifies the Tagalog rows in here — including
+    # any living in train/validation, which subtracting its 220 test rows would have missed.
+    language_prefix_source: uner-tagalog
+    prompt_field: inputs
     provider: universalner
     source_type: huggingface
     source_id: universalner/uner_llm_instructions
@@ -100,8 +105,17 @@ sources:
     # keeps a regression guard against a future source or converter change reintroducing it.
     overlaps_with: [uner-tagalog]
     profiles:
-      multi_500: {count: 500, selection: stable_hash, exclude_languages: [tl]}
-      multi_2000: {count: 2000, selection: stable_hash, exclude_languages: [tl]}
+    # Measured against the pinned revision on 2026-08-22 by matching the Tagalog prompt
+    # template across every split (issue #12):
+    #     train       54957 rows,   0 Tagalog
+    #     validation   7788 rows,   0 Tagalog
+    #     test        14950 rows, 220 Tagalog  <- exactly the tier-2 corpus
+    # Tagalog lives ONLY in `test`, and these profiles draw from `train`, so tier 3 is
+    # already free of it upstream. The exclusion still RUNS on every build, with an exact
+    # expected count of 0: if upstream ever moves Tagalog into train the build stops instead
+    # of quietly shipping different acceptance data.
+      multi_500: {count: 500, selection: stable_hash, exclude_languages: [tl], expected_removals: 0}
+      multi_2000: {count: 2000, selection: stable_hash, exclude_languages: [tl], expected_removals: 0}
 
   sea-instruct-2602:
     tier: 3

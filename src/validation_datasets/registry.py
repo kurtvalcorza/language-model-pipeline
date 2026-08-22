@@ -33,6 +33,11 @@ class Profile:
     # so it is independent of Tier 2 by construction rather than by luck — see the
     # acceptance ladder in validation-datasets/README.md.
     exclude_languages: tuple[str, ...] = ()
+    # Exact number of rows the exclusion must remove, verified against the pinned revision.
+    # None means "at least one". 0 is a legitimate, recorded value: the multilingual train
+    # split provably contains no Tagalog, so a train-split profile that removed one would
+    # mean upstream changed shape.
+    expected_removals: int | None = None
 
     @property
     def excludes_languages(self) -> bool:
@@ -66,9 +71,16 @@ class DatasetSource:
     # acceptance training material. Both facts are recorded so a later reader cannot mistake
     # the run for an independent Tagalog benchmark.
     pipeline_usage: str = "training"
-    # Row field carrying the language code. Required before any language exclusion can be
-    # applied; `None` means unknown, and an exclusion request then fails closed.
+    # Row field carrying the language code, when the source has one. Universal NER in the
+    # Aya format does NOT: its rows are only `inputs`/`targets`. Verified against the pinned
+    # revision 2026-08-22 (issue #12), which is why this stays None here rather than naming
+    # a guessed column.
     language_field: str | None = None
+    # Fallback mechanism when there is no language column: a single-language source whose
+    # shared instruction template identifies that language's rows inside this corpus.
+    language_prefix_source: str | None = None
+    # Field holding the prompt text that carries the template.
+    prompt_field: str = "inputs"
 
     @property
     def is_evaluation_only(self) -> bool:
@@ -123,6 +135,7 @@ class DatasetRegistry:
                     count=(p or {}).get("count"),
                     selection=(p or {}).get("selection", "stable_hash"),
                     exclude_languages=tuple((p or {}).get("exclude_languages") or ()),
+                    expected_removals=(p or {}).get("expected_removals"),
                 )
                 for name, p in (spec.get("profiles") or {}).items()
             }
@@ -147,6 +160,8 @@ class DatasetRegistry:
                 tier=spec.get("tier"),
                 pipeline_usage=spec.get("pipeline_usage", "training"),
                 language_field=spec.get("language_field"),
+                language_prefix_source=spec.get("language_prefix_source"),
+                prompt_field=spec.get("prompt_field", "inputs"),
             )
         return cls(sources, schema_version=str(raw.get("schema_version", "1.0")))
 

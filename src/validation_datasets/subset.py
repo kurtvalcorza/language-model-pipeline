@@ -80,6 +80,103 @@ class LanguageFilterError(RuntimeError):
     """Raised when a language exclusion cannot be applied with certainty."""
 
 
+# Minimum length for a derived prompt prefix. A short common prefix would be shared by every
+# language in the corpus and would exclude the whole dataset.
+MIN_PROMPT_PREFIX_CHARS = 100
+
+
+def derive_prompt_prefix(
+    rows: list[dict[str, Any]], *, field: str, dataset_id: str
+) -> str:
+    """Longest common prefix of `field` across every row of a single-language corpus.
+
+    Universal NER in the Aya format carries **no language column** — the rows are just
+    `inputs` and `targets`. What it does carry is a per-language instruction preamble,
+    byte-identical across every row in that language: Danish rows all begin "Angiv venligst
+    alle navngivne enheder...", Tagalog rows all begin "Sa aktibidad na ito, kailangan mong
+    hanapin...". So the prefix of a known single-language corpus identifies that language's
+    rows inside the multilingual one.
+
+    This is why the exclusion is not `language_field` based for this source: there is no
+    field to filter on, and inventing one would have meant a filter that silently matched
+    nothing.
+    """
+    if not rows:
+        raise LanguageFilterError(f"{dataset_id!r} returned no rows to derive a prefix from.")
+
+    values = []
+    for index, row in enumerate(rows):
+        value = row.get(field)
+        if not isinstance(value, str):
+            raise LanguageFilterError(
+                f"{dataset_id!r}: row {index} has no string {field!r} to derive a prefix "
+                "from."
+            )
+        values.append(value)
+
+    prefix = values[0]
+    for value in values[1:]:
+        limit = min(len(prefix), len(value))
+        cut = limit
+        for position in range(limit):
+            if prefix[position] != value[position]:
+                cut = position
+                break
+        prefix = prefix[:cut]
+        if len(prefix) < MIN_PROMPT_PREFIX_CHARS:
+            break
+
+    if len(prefix) < MIN_PROMPT_PREFIX_CHARS:
+        raise LanguageFilterError(
+            f"{dataset_id!r}: the rows share only {len(prefix)} leading characters, below "
+            f"the {MIN_PROMPT_PREFIX_CHARS} needed to identify a language template. This "
+            "corpus is not single-language, or its prompt format changed."
+        )
+    return prefix
+
+
+def drop_by_prompt_prefix(
+    rows: list[dict[str, Any]], *, field: str, prefix: str, dataset_id: str,
+    expected_removals: int | None = None,
+) -> list[dict[str, Any]]:
+    """Remove every row whose prompt begins with `prefix`. Fails closed.
+
+    Stronger than subtracting the tier-2 rows by fingerprint: that would only remove rows
+    that literally appear in the 220-row Tagalog corpus, leaving any Tagalog row living
+    elsewhere in the multilingual splits. Matching the template catches them all.
+
+    `expected_removals` is an EXACT count when the registry records one, and it is exact in
+    both directions on purpose. Measured against the pinned revision, the multilingual
+    `train` split contains zero Tagalog rows — they all live in `test` — so the honest
+    expectation for a train-split profile is 0, and "at least one" would fail a build that
+    is behaving correctly. Removing more than expected is equally a reason to stop: it means
+    the upstream corpus changed shape, and a human should look before that silently becomes
+    the new acceptance data.
+    """
+    kept = [row for row in rows if not str(row.get(field, "")).startswith(prefix)]
+    removed = len(rows) - len(kept)
+
+    if expected_removals is None:
+        satisfied = removed >= 1
+        wanted = "at least 1"
+    else:
+        satisfied = removed == expected_removals
+        wanted = f"exactly {expected_removals}"
+
+    if not satisfied:
+        raise LanguageFilterError(
+            f"{dataset_id!r}: excluding by prompt template removed {removed} rows, but "
+            f"{wanted} was expected. Either the templates no longer match, or the upstream "
+            "corpus changed which splits carry that language. Re-verify against the pinned "
+            "revision and update `expected_removals` deliberately."
+        )
+    if not kept:
+        raise LanguageFilterError(
+            f"{dataset_id!r}: excluding by prompt template removed every row."
+        )
+    return kept
+
+
 def drop_languages(
     rows: list[dict[str, Any]], *, field: str | None, exclude: tuple[str, ...],
     dataset_id: str,

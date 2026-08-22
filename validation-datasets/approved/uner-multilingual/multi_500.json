@@ -1,0 +1,26 @@
+{
+  "approvedOn": "2026-08-22",
+  "conversionVersion": 1,
+  "datasetId": "uner-multilingual",
+  "excludeLanguages": [
+    "tl"
+  ],
+  "fingerprintCount": 500,
+  "fingerprintDigest": "1ec83b7b9a31f946bcfcd629e9cdae8d9451ed7b84a1a4e698c5028e7afb0e72",
+  "packageSha256": "98478013f441b4da0e5e005af5ee204a0212ded7e2d1fbf8799236482d04fc3c",
+  "pipelineUsage": "training",
+  "profile": "multi_500",
+  "schemaVersion": "1.0",
+  "selectedSourceIndexCount": 500,
+  "selectedSourceIndexDigest": "f26331efc0b3978d1fecf4915af9830e090080d809a926d361217406cd2594b6",
+  "sourceId": "universalner/uner_llm_instructions",
+  "sourceRevision": "dc9e8b0f7aa1d3a9a44a14e8f4c868e2bb4f19b5",
+  "sourceSplit": "train",
+  "splits": {
+    "train": {
+      "exampleCount": 500,
+      "sha256": "ad24ba9ecd945cd90f80ed4fe26c394026f2953bb97e0ddd2f5aae18ed10dae3"
+    }
+  },
+  "toolVersion": "1.0"
+}

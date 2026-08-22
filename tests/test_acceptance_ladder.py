@@ -26,7 +26,12 @@ from validation_datasets.approval import (
     load_fingerprints,
 )
 from validation_datasets.registry import DatasetRegistry
-from validation_datasets.subset import LanguageFilterError, drop_languages
+from validation_datasets.subset import (
+    LanguageFilterError,
+    derive_prompt_prefix,
+    drop_by_prompt_prefix,
+    drop_languages,
+)
 
 
 @pytest.fixture(scope="module")
@@ -221,3 +226,102 @@ def test_tier_two_and_tier_three_are_disjoint_once_both_are_approved():
         pytest.skip("tier 2/3 profiles are not approved yet (blocked on language_field)")
     shared = tier2 & tier3
     assert not shared, f"{len(shared)} canonical examples appear in both tiers"
+
+
+# -- exclusion by prompt template (issue #12) -----------------------------------
+#
+# Universal NER in the Aya format has NO language column: its rows are `inputs` and
+# `targets` only, verified against the pinned revision. What it has is a per-language
+# instruction preamble, identical across every row in that language, so a single-language
+# corpus identifies its own rows inside the multilingual one.
+
+TL_TEMPLATE = (
+    "Sa aktibidad na ito, kailangan mong hanapin ang mga named entities na binanggit sa "
+    "pangungusap. Gamitin lamang ang tatlong kategorya: PER, ORG, LOC. Halimbawa: "
+)
+DA_TEMPLATE = (
+    "Angiv venligst alle navngivne enheder naevnt i saetningen nedenfor. Brug kun "
+    "kategorierne PER, ORG og LOC. Eksempel paa saetning og resultat: "
+)
+
+
+def _rows(template: str, count: int, field: str = "inputs") -> list[dict]:
+    return [{field: f"{template}sentence {i}", "targets": "{}"} for i in range(count)]
+
+
+def test_a_single_language_corpus_yields_its_template():
+    prefix = derive_prompt_prefix(_rows(TL_TEMPLATE, 20), field="inputs", dataset_id="tl")
+    assert prefix.startswith("Sa aktibidad na ito")
+    assert len(prefix) >= len(TL_TEMPLATE) - 1
+
+
+def test_a_mixed_corpus_has_no_usable_template():
+    """The guard against deriving a prefix from something that is not one language.
+
+    Two languages share almost no leading text, so the common prefix collapses to nothing
+    and a filter built on it would match every row or none.
+    """
+    mixed = _rows(TL_TEMPLATE, 10) + _rows(DA_TEMPLATE, 10)
+    with pytest.raises(LanguageFilterError) as exc:
+        derive_prompt_prefix(mixed, field="inputs", dataset_id="mixed")
+    assert "not single-language" in str(exc.value)
+
+
+def test_the_template_removes_only_that_language():
+    corpus = _rows(DA_TEMPLATE, 30) + _rows(TL_TEMPLATE, 7)
+    prefix = derive_prompt_prefix(_rows(TL_TEMPLATE, 7), field="inputs", dataset_id="tl")
+    kept = drop_by_prompt_prefix(
+        corpus, field="inputs", prefix=prefix, dataset_id="ml", expected_removals=7
+    )
+    assert len(kept) == 30
+    assert not any(row["inputs"].startswith("Sa aktibidad") for row in kept)
+
+
+def test_zero_removals_is_a_legitimate_recorded_expectation():
+    """The measured reality for tier 3: the train split contains no Tagalog at all.
+
+    A blanket "at least one removal" guard would fail this build even though it is behaving
+    exactly correctly, which is why the expectation is an exact recorded number.
+    """
+    corpus = _rows(DA_TEMPLATE, 30)
+    prefix = derive_prompt_prefix(_rows(TL_TEMPLATE, 7), field="inputs", dataset_id="tl")
+    kept = drop_by_prompt_prefix(
+        corpus, field="inputs", prefix=prefix, dataset_id="ml", expected_removals=0
+    )
+    assert len(kept) == 30
+
+
+def test_removing_more_than_expected_also_fails():
+    """Upstream moving a language into a different split must stop the build.
+
+    The rows would have been removed correctly, so the data is safe either way — but the
+    corpus changed shape, and that should be a human decision rather than silently becoming
+    the new acceptance data.
+    """
+    corpus = _rows(DA_TEMPLATE, 30) + _rows(TL_TEMPLATE, 5)
+    prefix = derive_prompt_prefix(_rows(TL_TEMPLATE, 5), field="inputs", dataset_id="tl")
+    with pytest.raises(LanguageFilterError) as exc:
+        drop_by_prompt_prefix(
+            corpus, field="inputs", prefix=prefix, dataset_id="ml", expected_removals=0
+        )
+    assert "removed 5 rows" in str(exc.value)
+    assert "exactly 0" in str(exc.value)
+
+
+def test_the_registry_records_the_mechanism_and_the_measured_count(registry):
+    """Tier 3 declares HOW it excludes, not merely that it does."""
+    source = registry.get("uner-multilingual")
+    assert source.language_field is None       # verified: this corpus has no language column
+    assert source.language_prefix_source == "uner-tagalog"
+    for profile in source.profiles.values():
+        assert profile.exclude_languages == ("tl",)
+        assert profile.expected_removals == 0  # measured against the pinned revision
+
+
+def test_tier_two_and_tier_three_really_are_disjoint():
+    """No longer a skip: both tiers are built and approved, so this enforces continuously."""
+    tier2 = load_fingerprints("uner-tagalog", "full")
+    tier3 = load_fingerprints("uner-multilingual", "multi_500")
+    assert len(tier2) == 220
+    assert len(tier3) == 500
+    assert not (tier2 & tier3)

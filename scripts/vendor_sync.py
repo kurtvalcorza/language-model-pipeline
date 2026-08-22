@@ -23,40 +23,20 @@ requirements.txt. Import paths do not change.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import shutil
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from lmpipeline.vendoring import (  # noqa: E402
+    SHA_FILENAME,
+    SKIP_DIRS,
+    tree_hash,
+    verify_vendored,
+)
+
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent / "src" / "lmpipeline"
-SHA_FILENAME = "VENDOR_SHA"
-SKIP_DIRS = {"__pycache__", ".pytest_cache"}
-
-
-def iter_package_files(root: Path):
-    for path in sorted(root.rglob("*")):
-        if not path.is_file():
-            continue
-        if any(part in SKIP_DIRS for part in path.parts):
-            continue
-        if path.suffix in {".pyc", ".pyo"}:
-            continue
-        yield path
-
-
-def tree_hash(root: Path) -> str:
-    """Hash of relative paths plus contents.
-
-    Path-sensitive so a deleted or renamed file changes the hash, not just edited bytes.
-    """
-    digest = hashlib.sha256()
-    for path in iter_package_files(root):
-        rel = path.relative_to(root).as_posix()
-        digest.update(rel.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(path.read_bytes())
-        digest.update(b"\0")
-    return digest.hexdigest()
 
 
 def do_sync(into: Path) -> int:
@@ -75,28 +55,11 @@ def do_sync(into: Path) -> int:
 
 
 def do_verify(into: Path) -> int:
-    target = into / "lmpipeline"
-    sha_file = into / SHA_FILENAME
-    if not target.is_dir():
-        print(f"FAIL: no vendored package at {target}", file=sys.stderr)
+    ok, message = verify_vendored(into)
+    if not ok:
+        print(f"FAIL: {message}", file=sys.stderr)
         return 1
-    if not sha_file.is_file():
-        print(f"FAIL: missing {sha_file}", file=sys.stderr)
-        return 1
-
-    recorded = sha_file.read_text(encoding="utf-8").strip()
-    actual = tree_hash(target)
-    if recorded != actual:
-        print(
-            "FAIL: vendored lmpipeline has drifted.\n"
-            f"  recorded: {recorded}\n"
-            f"  actual:   {actual}\n"
-            "Re-run `vendor_sync.py sync` against the pinned upstream revision. Never edit "
-            "the vendored tree directly.",
-            file=sys.stderr,
-        )
-        return 1
-    print(f"OK: vendored lmpipeline matches {recorded}")
+    print(f"OK: {message}")
     return 0
 
 

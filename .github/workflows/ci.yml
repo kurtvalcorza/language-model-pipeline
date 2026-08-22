@@ -47,6 +47,12 @@ jobs:
       - name: Prove the suite needs no network
         # The fixture corpus is committed and the tests use a fake tokenizer specifically so
         # this holds. `datasets` is a `fetch` extra and must never become a test dependency.
+        #
+        # Runs once, not per version: this is a property of pyproject.toml, identical on
+        # every interpreter. It also needs tomllib, which is stdlib only from 3.11 — a
+        # detail that made the step itself fail on the 3.10 leg, which is precisely the
+        # kind of thing the version matrix is there to surface.
+        if: matrix.python-version == '3.12'
         run: |
           python - <<'PY'
           import tomllib, pathlib, sys

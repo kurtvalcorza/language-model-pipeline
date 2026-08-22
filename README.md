@@ -120,6 +120,29 @@ Two things these numbers do **not** mean:
 Neither does any of this speak to DIMER's own hardware or mount topology — see issue #7, and
 `language-model-finetuner#3` for a mount assumption this matrix surfaced.
 
+### What is refused, and where
+
+The fifth registry entry, `phi-4-mini-instruct`, is absent from the matrix by construction:
+`microsoft/Phi-4-mini-instruct` carries the Hub's `custom_code` tag and its documented usage
+requires `trust_remote_code=True`, so SECURITY.md holds it at `enabled: false`,
+`approval_state: blocked`, `revision: null`. Verified 2026-08-22 that this is enforced rather
+than merely declared, at three independent layers:
+
+| Layer | Behaviour with `model_key=phi-4-mini-instruct` |
+|---|---|
+| `dimer-pipeline.json` enum | `['qwen3-1.7b', 'qwen3-4b', 'granite-4.1-3b']` — not offered, unreachable from the Workbench |
+| Validator container | exit 1, `MODEL_DISABLED`, structured result written |
+| Finetuner container | exit 1, `MODEL_DISABLED`, structured result written |
+
+Both containers raise from `ModelRegistry.resolve`, which runs **before** any weight fetch.
+Nothing is downloaded and no code path that could honour `trust_remote_code` is ever reached
+— the gate is not a download-then-check. The model-registry schema encodes the same invariant
+(`requires_trust_remote_code: true` implies the entry is disabled), so the registry cannot
+drift into offering it without failing CI.
+
+`qwen3-0.6b` is likewise absent from that enum. It is `internal_only` — the CI and
+smoke-test model, reachable only when named directly, never from the Workbench form.
+
 ## Status
 
 **All PRs merged.** Contracts, registry, shared package, specs, JSON Schemas, a measured

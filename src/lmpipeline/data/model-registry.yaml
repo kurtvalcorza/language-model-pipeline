@@ -289,11 +289,56 @@ models:
         min_vram_gb: null
         measured_on: null
 
+  llama-3.2-3b-instruct:
+    # Compatible, and deliberately NOT runnable yet. Recording that distinction is the whole
+    # point of this entry: the model itself clears every technical gate — LlamaForCausalLM, a
+    # real chat template, 3.2B, vocab 128,256 (half Gemma's, so far less logits pressure) —
+    # verified against the Hub 2026-08-22. What is unverified is DIMER's ability to deliver
+    # Hugging Face credentials, and that is a platform question, not a model one.
+    #
+    # Why not simply enable it: the validator bakes one tokenizer per ENABLED entry at image
+    # build time (scripts/fetch_tokenizers.py) and fails the build loudly if any cannot be
+    # fetched. A gated entry would therefore make every validator image build require an HF
+    # credential — and DEPLOYMENT.md §4 says DIMER builds have no credentials in the build
+    # context. Enabling this today would trade away the property that makes validation
+    # network-independent and its tokenizer revision build-pinned, for one model.
+    #
+    # The two rejected alternatives, recorded so they are not re-proposed: fetching the
+    # tokenizer at RUNTIME (weakens build-time pinning and network independence), and
+    # requiring BuildKit secret support in code (designing against an unverified platform
+    # capability). Kurt's call, 2026-08-22.
+    #
+    # LICENCE: llama3.2 community licence, not OSI-open. Terms accepted 2026-08-22. Use,
+    # modification and derivative works are permitted, but redistribution carries attribution
+    # and naming obligations that travel with the Llama materials — so the artifact contract
+    # must record them, not merely note that they exist. See the credentials issue.
+    enabled: false
+    internal_only: true
+    approval_state: blocked
+    blocked_reason: dimer_hf_credentials_unverified
+    blocked_detail: >
+      DIMER build-time and runtime Hugging Face credential delivery has not yet been
+      verified. The model is technically compatible; only credential delivery blocks it.
+    provider: meta-llama
+    model_id: meta-llama/Llama-3.2-3B-Instruct
+    revision: 0cb88a4f764b7a12671c53f0838cd831a0843b95
+    license: llama3.2
+    gated: manual
+    architecture: causal_lm
+    backend: generic_causal_lm
+    requires_trust_remote_code: false
+    training_methods: [lora, qlora]
+    max_sequence_length: 4096
+    chat_template: tokenizer
+    lora_target_modules: auto
+    serving_profile: peft_adapter
+
   phi-4-mini-instruct:
     # DISABLED. microsoft/Phi-4-mini-instruct carries the `custom_code` tag on the Hub and
     # its documented usage requires trust_remote_code=True. Blocked pending the deliberate
     # remote-code review required by SECURITY.md. Do not flip `enabled` without it.
     enabled: false
+    blocked_reason: remote_code_review_pending
     provider: microsoft
     model_id: microsoft/Phi-4-mini-instruct
     revision: null

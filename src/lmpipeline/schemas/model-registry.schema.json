@@ -29,7 +29,7 @@
   "$defs": {
     "measuredAt": {
       "type": "object",
-      "description": "The configuration a measurement was taken at. A profile measured at 2048x1 says nothing about a 512x2 job, and applying it anyway refuses work that demonstrably runs \u2014 which is exactly what happened when these numbers first landed.",
+      "description": "The configuration a measurement was taken at. A profile measured at 2048x1 says nothing about a 512x2 job, and applying it anyway refuses work that demonstrably runs — which is exactly what happened when these numbers first landed.",
       "properties": {
         "max_sequence_length": {
           "type": "integer",
@@ -220,6 +220,31 @@
         },
         "notes": {
           "type": "string"
+        },
+        "gated": {
+          "description": "Upstream Hub gating, mirroring the Hub's own vocabulary rather than collapsing to a boolean: `auto` (terms accepted programmatically) and `manual` (a human approves each request) are operationally different. This is SOURCE METADATA about the upstream repo, not deployment policy -- a gated model mirrored into an internal store may need no credential at runtime, while its upstream repo stays `manual` forever.",
+          "enum": [
+            false,
+            "auto",
+            "manual"
+          ]
+        },
+        "blocked_reason": {
+          "description": "Why an entry is blocked, as policy state rather than commentary. An enum so the reason is comparable across entries -- CI, filtering and reporting can act on it, which free text cannot support. Explanatory prose belongs in `blocked_detail` or a comment.",
+          "enum": [
+            "dimer_hf_credentials_unverified",
+            "remote_code_review_pending",
+            "license_terms_not_accepted",
+            "architecture_unsupported",
+            "chat_template_missing",
+            "resource_profile_unavailable",
+            "security_review_pending"
+          ]
+        },
+        "blocked_detail": {
+          "description": "Optional human-readable elaboration on blocked_reason. Never parsed.",
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
@@ -296,6 +321,51 @@
             },
             "required": [
               "enabled"
+            ]
+          }
+        },
+        {
+          "$comment": "A blocked entry must say WHY, in comparable terms. 'blocked' alone forces every reader to reconstruct the reason from prose or git history.",
+          "if": {
+            "type": "object",
+            "properties": {
+              "approval_state": {
+                "const": "blocked"
+              }
+            },
+            "required": [
+              "approval_state"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "required": [
+              "blocked_reason"
+            ]
+          }
+        },
+        {
+          "$comment": "A model blocked on unverified DIMER credential delivery must not be user-facing. internal_only keeps it out of the finetuner's dimer-pipeline.json enum, which the finetuner asserts against the user-facing registry -- so offering it in the Workbench would fail CI as well as being wrong.",
+          "if": {
+            "type": "object",
+            "properties": {
+              "blocked_reason": {
+                "const": "dimer_hf_credentials_unverified"
+              }
+            },
+            "required": [
+              "blocked_reason"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "internal_only": {
+                "const": true
+              }
+            },
+            "required": [
+              "internal_only"
             ]
           }
         }

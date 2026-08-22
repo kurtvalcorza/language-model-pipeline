@@ -58,6 +58,15 @@ acceptance dataset.
   and a subset that depends on it changes when upstream reorders. Row identity is content
   plus an *occurrence counter*, not an absolute index — using the index made selection
   order-dependent, which a test caught.
+- **`fingerprintCount` below `exampleCount` is expected, not a defect.** Because identity
+  carries an occurrence counter, both copies of a row that upstream duplicates are eligible,
+  and a large enough draw will sometimes take both. `uner-multilingual@dc9e8b0f` holds 54,957
+  rows but 53,825 distinct contents — 1,132 redundant rows in 697 groups, or 3,758 duplicate
+  pairs. Each pair survives a draw of `n` with probability `(n/54957)²`, so `multi_2000`
+  expects ~5 collapsed pairs and records 1997/2000, while `multi_500` expects 0.31 and
+  records 500/500. The profiles are not behaving differently; the smaller one is too small
+  to hit it. Deduplicating would mean giving up occurrence-based identity, which is the
+  thing keeping selection independent of upstream ordering.
 - **Profiles are salted by name**, so `smoke_500` is not a superset of `smoke_100` — a nested
   prefix would make the larger profile's extra rows systematically unlike its first hundred.
 - **Canonical serialization is pinned**: sorted keys, no ASCII escaping, LF endings.

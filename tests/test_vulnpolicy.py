@@ -342,3 +342,95 @@ def test_the_real_failure_this_prevents():
     """
     with pytest.raises(ScanError):
         evaluate(parse_trivy({}), policy=_policy(), scope="finetuner", today=TODAY)
+
+
+# -- package-level exceptions -------------------------------------------------------
+#
+# Opt-in, and deliberately broader than an id match: it covers advisories not yet
+# published. That is right only when the reachability argument is about the PACKAGE rather
+# than any individual CVE -- "nothing in this image can consume these files at all" -- and
+# it is why the mode must be stated explicitly rather than inferred.
+#
+# The need was found by testing against a real scan: a package-shaped exception written
+# without this mode matched nothing and would have merged as an inert no-op that looked
+# like a fix.
+
+
+def _pkg_exception(match="package", scope=("finetuner",), expires="2099-01-01"):
+    return _policy(exceptions=[{
+        "id": "linux-libc-dev-kernel-headers", "package": "linux-libc-dev",
+        "match": match, "scope": list(scope), "owner": "kurtvalcorza",
+        "expires": expires, "rationale": "no compiler in the image can consume headers",
+    }])
+
+
+def _kernel_finding(identifier="CVE-2025-38724"):
+    return Finding("trivy", identifier, "linux-libc-dev", "5.15.0-151.161",
+                   "CRITICAL", "5.15.0-185.195")
+
+
+def test_a_package_exception_covers_every_cve_in_that_package():
+    findings = [_kernel_finding("CVE-2025-38724"), _kernel_finding("CVE-2026-43011")]
+    decision = evaluate(findings, policy=_pkg_exception(), scope="finetuner", today=TODAY)
+    assert decision.ok
+    assert len(decision.excepted) == 2
+
+
+def test_a_package_exception_covers_an_advisory_it_has_never_seen():
+    """The point of package matching, and the reason it must be opt-in."""
+    decision = evaluate([_kernel_finding("CVE-2099-99999")], policy=_pkg_exception(),
+                        scope="finetuner", today=TODAY)
+    assert decision.ok
+
+
+def test_a_package_exception_does_not_cover_other_packages():
+    other = Finding("trivy", "CVE-1", "openssl", "1.0", "CRITICAL", "1.1")
+    decision = evaluate([other], policy=_pkg_exception(), scope="finetuner", today=TODAY)
+    assert not decision.ok
+
+
+def test_a_package_exception_still_respects_scope():
+    decision = evaluate([_kernel_finding()], policy=_pkg_exception(scope=("finetuner",)),
+                        scope="validator", today=TODAY)
+    assert not decision.ok
+
+
+def test_a_package_exception_still_expires():
+    decision = evaluate([_kernel_finding()], policy=_pkg_exception(expires="2026-08-21"),
+                        scope="finetuner", today=TODAY)
+    assert not decision.ok
+    assert decision.expired
+
+
+def test_id_matching_remains_the_default():
+    """An exception without `match` must NOT silently become package-wide."""
+    policy = _policy(exceptions=[{
+        "id": "CVE-2025-38724", "package": "linux-libc-dev", "scope": ["finetuner"],
+        "owner": "k", "expires": "2099-01-01", "rationale": "specific advisory only",
+    }])
+    decision = evaluate([_kernel_finding("CVE-2025-38724"), _kernel_finding("CVE-OTHER")],
+                        policy=policy, scope="finetuner", today=TODAY)
+    assert not decision.ok
+    assert len(decision.excepted) == 1 and len(decision.blocking) == 1
+
+
+def test_an_unknown_match_mode_is_rejected(tmp_path):
+    doc = _policy(exceptions=[{
+        "id": "X", "package": "p", "match": "regex", "scope": ["finetuner"],
+        "owner": "o", "expires": "2099-01-01", "rationale": "r",
+    }])
+    path = tmp_path / "policy.yaml"
+    path.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    with pytest.raises(PolicyError, match="match="):
+        load_policy(path)
+
+
+def test_the_committed_kernel_header_exception_is_package_scoped_to_the_finetuner():
+    """Guards the real entry against being silently widened or narrowed."""
+    policy = load_policy()
+    entry = next(e for e in policy["exceptions"] if e["package"] == "linux-libc-dev")
+    assert entry["match"] == "package"
+    assert entry["scope"] == ["finetuner"]
+    assert entry["expires"] == "2026-11-22"
+    for expected in ("no cc, gcc or nvcc", "REASSESS", "seven packages"):
+        assert expected in entry["rationale"]

@@ -96,6 +96,12 @@ def load_policy(path: Path | str | None = None) -> dict[str, Any]:
                 f"Exception {entry.get('id', '<no id>')!r} is missing {', '.join(missing)}. "
                 "Every exception must record what, why, who, until when, and where."
             )
+        mode = str(entry.get("match", "id"))
+        if mode not in ("id", "package"):
+            raise PolicyError(
+                f"Exception {entry['id']!r} has match={mode!r}; expected 'id' or 'package'."
+            )
+
         try:
             _dt.date.fromisoformat(str(entry["expires"]))
         except ValueError as exc:
@@ -187,13 +193,32 @@ def parse_trivy(document: dict[str, Any]) -> list[Finding]:
 def _matching_exception(
     finding: Finding, policy: dict[str, Any], *, scope: str
 ) -> dict[str, Any] | None:
+    """Find the exception covering this finding, if any.
+
+    Two match modes, and the broader one is OPT-IN so it can never be reached by accident:
+
+      match: id       (default) -- this advisory, by id or alias. Use when the argument is
+                      about a specific vulnerability.
+      match: package  -- every finding in one package. Use ONLY when the reachability
+                      argument is about the package rather than any individual CVE, e.g.
+                      "nothing in this image can consume these files at all". It
+                      deliberately also covers advisories not yet published, which is
+                      exactly what makes it broader and why it must be stated explicitly,
+                      scoped to one image, and bounded by an expiry.
+    """
     for entry in policy.get("exceptions") or []:
-        identifiers = {str(entry["id"])} | {str(a) for a in (entry.get("aliases") or [])}
-        if finding.identifier not in identifiers:
-            continue
         if scope not in (entry.get("scope") or []):
             continue
-        return entry
+
+        mode = str(entry.get("match", "id"))
+        if mode == "package":
+            if finding.package == str(entry["package"]):
+                return entry
+            continue
+
+        identifiers = {str(entry["id"])} | {str(a) for a in (entry.get("aliases") or [])}
+        if finding.identifier in identifiers:
+            return entry
     return None
 
 

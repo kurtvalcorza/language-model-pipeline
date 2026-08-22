@@ -190,7 +190,7 @@ identical digest, packaged, and **accepted by the validator container**:
 fetched 15011 rows from databricks/databricks-dolly-15k@bdd27f4d94b9
 built 100 examples, sha256 0dacfbf2af8b3c54...
 rebuild digest identical
-package sha256 62913fa53fb407da...
+package sha256 2fc68577a344b79e...
 validator: 8/8 checks pass, median 112 tokens, longest 943 of 4096
 approved 2026-08-22 -> approved/dolly-15k/smoke_100.json
 ```
@@ -199,3 +199,15 @@ The drift gate was also exercised against its failure case, not only its success
 build tampered so that its own manifest still agreed with it — the exact scenario the
 git-ignored manifest could not catch — was rejected by `verify` with exit 1 and a named
 digest mismatch.
+
+### The package digest changed once, for a real reason
+
+It was `62913fa5...` until 2026-08-22. A zip member records the OS that created it, and
+Python fills that byte in from the host — 0 on Windows, 3 on Linux — so the same inputs
+produced different archive bytes depending on who built them. Every digest claim here was
+therefore only true per-platform. CI caught it on the first Linux run; no amount of local
+rebuilding could have.
+
+`create_system` is now pinned in both the packager and the fixture generator, verified by
+regenerating the whole corpus on Linux and on Windows and comparing: **9 of 9 archives
+byte-identical**. The `.jsonl` digests were never affected — only archives.

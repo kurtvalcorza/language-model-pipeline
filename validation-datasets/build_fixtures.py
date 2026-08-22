@@ -179,6 +179,21 @@ def case_zero_examples(root: Path) -> None:
 FIXED_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 
+# Zip members record the OS that created them, and Python fills it in from the host:
+# 0 on Windows, 3 (Unix) everywhere else. That byte lands in the central directory, so the
+# same generator produced different archive bytes on a Windows laptop and on Linux CI —
+# which meant "regeneration is byte-identical" was only ever true per-platform. Pinned here
+# so the fixture digests are a property of the corpus, not of who built it.
+ZIP_CREATE_SYSTEM = 3
+
+
+def _pinned_zipinfo(name: str, *, compression: int) -> zipfile.ZipInfo:
+    info = zipfile.ZipInfo(name, date_time=FIXED_TIMESTAMP)
+    info.compress_type = compression
+    info.create_system = ZIP_CREATE_SYSTEM
+    return info
+
+
 def _zip_case(root: Path, members: list, *, name: str = "dataset.zip",
               compression: int = zipfile.ZIP_DEFLATED) -> None:
     root.mkdir(parents=True, exist_ok=True)
@@ -187,9 +202,9 @@ def _zip_case(root: Path, members: list, *, name: str = "dataset.zip",
             if isinstance(member, zipfile.ZipInfo):
                 info = member
                 info.date_time = FIXED_TIMESTAMP
+                info.create_system = ZIP_CREATE_SYSTEM
             else:
-                info = zipfile.ZipInfo(member, date_time=FIXED_TIMESTAMP)
-                info.compress_type = compression
+                info = _pinned_zipinfo(member, compression=compression)
             zf.writestr(info, content)
 
 
@@ -230,9 +245,10 @@ def case_zip_nested_archive(root: Path) -> None:
     # in the outer archive, so any variation there propagates outward.
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as inner:
-        info = zipfile.ZipInfo("train.jsonl", date_time=FIXED_TIMESTAMP)
-        info.compress_type = zipfile.ZIP_DEFLATED
-        inner.writestr(info, _valid_jsonl_text())
+        inner.writestr(
+            _pinned_zipinfo("train.jsonl", compression=zipfile.ZIP_DEFLATED),
+            _valid_jsonl_text(),
+        )
     _zip_case(root, [("inner.zip", buffer.getvalue())])
 
 

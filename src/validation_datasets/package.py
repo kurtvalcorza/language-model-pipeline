@@ -22,6 +22,10 @@ from .registry import DatasetSource
 # Fixed member timestamp. The alternative is a package whose digest changes every build.
 FIXED_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
+# Fixed creating-OS byte. Python derives it from the host (0 Windows, 3 Unix), which made
+# the same inputs produce different archive bytes on a laptop and on CI.
+ZIP_CREATE_SYSTEM = 3
+
 CANONICAL_SPLIT_ORDER = ("train", "validation", "test")
 
 
@@ -123,6 +127,11 @@ def write_dimer_zip(splits: dict[str, Path], destination: Path) -> str:
             info.compress_type = zipfile.ZIP_STORED
             # Normal file, 0644. Left unset, the mode bits vary by platform.
             info.external_attr = (0o100644 << 16)
+            # Creating OS, which Python otherwise fills in from the host: 0 on Windows,
+            # 3 (Unix) elsewhere. It lands in the central directory, so leaving it alone
+            # makes the package digest depend on which machine built it — and an
+            # acceptance package referenced by digest must not.
+            info.create_system = ZIP_CREATE_SYSTEM
             zf.writestr(info, splits[split].read_bytes())
 
     return sha256_file(destination)

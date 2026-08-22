@@ -14,6 +14,8 @@ import pytest
 from lmpipeline.datasets.normalize import iter_examples
 from validation_datasets.convert import ConversionError, convert_dolly, to_canonical
 from validation_datasets.package import (
+    FIXED_TIMESTAMP,
+    ZIP_CREATE_SYSTEM,
     build_manifest,
     sha256_file,
     write_canonical_jsonl,
@@ -266,3 +268,22 @@ def test_selected_index_digest_is_order_independent(tmp_path, registry):
 
     assert digest_for([3, 1, 2]) == digest_for([1, 2, 3])
     assert digest_for([3, 1, 2]) != digest_for([1, 2, 4])
+
+
+def test_archive_metadata_does_not_depend_on_the_building_platform(tmp_path):
+    """A zip member records the OS that created it, and Python fills it in from the host.
+
+    0 on Windows, 3 (Unix) elsewhere, written into the central directory — so identical
+    inputs produced different archive bytes on a laptop and on CI. Every digest-based claim
+    in this suite was therefore only true per-platform, which CI caught and local runs never
+    could. Pinned, and asserted here so it cannot drift back.
+    """
+    records = [{"messages": [{"role": "user", "content": "q"},
+                             {"role": "assistant", "content": "a"}]}]
+    write_canonical_jsonl(tmp_path / "train.jsonl", records)
+    write_dimer_zip({"train": tmp_path / "train.jsonl"}, tmp_path / "pkg.zip")
+
+    with zipfile.ZipFile(tmp_path / "pkg.zip") as zf:
+        for info in zf.infolist():
+            assert info.create_system == ZIP_CREATE_SYSTEM
+            assert info.date_time == FIXED_TIMESTAMP

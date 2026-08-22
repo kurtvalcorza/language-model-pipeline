@@ -196,9 +196,15 @@ def test_every_way_a_rebuild_can_drift_is_reported(mutate, expected):
 
 
 def test_a_missing_approval_is_an_error_not_a_pass():
-    """`verify` must fail on an unapproved profile rather than quietly finding nothing."""
+    """`verify` must fail on an unapproved profile rather than quietly finding nothing.
+
+    Deliberately a name no profile will ever carry. This test previously named a real
+    unapproved profile, which made it assert on a fact that approving that profile silently
+    falsified — the test failed for a reason that had nothing to do with the behaviour it
+    guards.
+    """
     with pytest.raises(ApprovalError):
-        load_approval("dolly-15k", "smoke_500")
+        load_approval("dolly-15k", "never_approved_profile")
 
 
 # -- the tier 2 / tier 3 disjointness gate --------------------------------------

@@ -73,19 +73,96 @@ python -m venv .venv
 ./.venv/Scripts/python.exe -m ruff check .
 ```
 
+## End-to-end acceptance runs
+
+Measured 2026-08-22. Each run is the real DIMER flow — validator container → finetuner
+container — against a committed acceptance profile, not a synthetic fixture. Images were
+rebuilt from merged `main` (validator `e92ed1e`, finetuner `402b2f4`).
+
+Four models on tier 1, plus `granite-4.1-3b` across all three training tiers. Six runs, six
+passes.
+
+| Run | Model | Method | Tier | Examples | Train loss | Val loss | Peak VRAM | Train wall |
+|---|---|---|---|---|---:|---:|---:|---:|
+| r1 | `qwen3-0.6b` | LoRA | 1 dolly | 79 | 1.9148 | 1.8592 | 5.72 GB | 15.5s |
+| r2 | `qwen3-1.7b` | QLoRA | 1 dolly | 79 | 1.7883 | 1.6412 | 4.46 GB | 83.9s |
+| r3 | `qwen3-4b` | QLoRA | 1 dolly | 79 | 1.6501 | 1.4911 | 6.19 GB | 158.3s |
+| r4 | `granite-4.1-3b` | QLoRA | 1 dolly | 79 | 1.6245 | 1.5199 | 4.69 GB | 146.9s |
+| r5 | `granite-4.1-3b` | QLoRA | 2 tagalog | 179 | 0.2224 | 0.1648 | 3.79 GB | 296.3s |
+| r6 | `granite-4.1-3b` | QLoRA | 3 multi | 400 | 0.2138 | 0.1966 | 4.37 GB | 717.5s |
+
+`max_sequence_length=1024`, 1 epoch, batch 1, grad-accum 2, on an RTX 5070 Ti Laptop
+(11.94 GB, sm_120). Example counts are post-split — the 0.2 validation fraction takes
+100/220/500 down to 79/179/400.
+
+What the six runs establish:
+
+- Every model trains through the real dataset path on real data, `granite-4.1-3b` included.
+  A non-Qwen vendor running the identical container with no model-specific handling is the
+  model-agnostic claim demonstrated rather than asserted.
+- Every acceptance tier works end to end, Tagalog and multilingual among them.
+- Every run loaded its registry-pinned revision — `baseModelRevision` matched
+  `baseModelRevisionExpected` in all six — so nothing silently fell back to `main`.
+- Publication is sound: the clean-load smoke test ran, `os.replace` left no `.staging`
+  residue, and adapters landed at mode 644 rather than the 0600 safetensors writes by
+  default.
+
+Two things these numbers do **not** mean:
+
+- **Tier 2/3 losses are not "better" than tier 1.** They reflect task shape. UNER targets are
+  short structured NER labels at roughly 14 supervised tokens per example against dolly's
+  ~79 of free-form answer. Comparing loss across tiers measures the datasets, not the models.
+- **They do not supersede `COMPATIBILITY.md`.** That matrix is deliberately measured at
+  `seq=2048` padded to full length to capture the worst case a real dataset can reach; these
+  ran at `seq=1024` on genuinely short examples. The lower peaks here are expected, and the
+  registry's `min_vram_gb` ceilings stand unchanged.
+
+Neither does any of this speak to DIMER's own hardware or mount topology — see issue #7, and
+`language-model-finetuner#3` for a mount assumption this matrix surfaced.
+
+### What is refused, and where
+
+The fifth registry entry, `phi-4-mini-instruct`, is absent from the matrix by construction:
+`microsoft/Phi-4-mini-instruct` carries the Hub's `custom_code` tag and its documented usage
+requires `trust_remote_code=True`, so SECURITY.md holds it at `enabled: false`,
+`approval_state: blocked`, `revision: null`. Verified 2026-08-22 that this is enforced rather
+than merely declared, at three independent layers:
+
+| Layer | Behaviour with `model_key=phi-4-mini-instruct` |
+|---|---|
+| `dimer-pipeline.json` enum | `['qwen3-1.7b', 'qwen3-4b', 'granite-4.1-3b']` — not offered, unreachable from the Workbench |
+| Validator container | exit 1, `MODEL_DISABLED`, structured result written |
+| Finetuner container | exit 1, `MODEL_DISABLED`, structured result written |
+
+Both containers raise from `ModelRegistry.resolve`, which runs **before** any weight fetch.
+Nothing is downloaded and no code path that could honour `trust_remote_code` is ever reached
+— the gate is not a download-then-check. The model-registry schema encodes the same invariant
+(`requires_trust_remote_code: true` implies the entry is disabled), so the registry cannot
+drift into offering it without failing CI.
+
+`qwen3-0.6b` is likewise absent from that enum. It is `internal_only` — the CI and
+smoke-test model, reachable only when named directly, never from the Workbench form.
+
 ## Status
 
-**PRs 1–4 complete.** Contracts, registry, shared package, specs, and a measured resource
-matrix. 84 tests passing.
+**All PRs merged.** Contracts, registry, shared package, specs, JSON Schemas, a measured
+resource matrix, and the full `validation-datasets/` acceptance suite. 206 tests passing,
+2 skipped.
 
 The consumer repositories are correspondingly complete: the validator runs end to end in its
 image against real tokenizers, and the finetuner trains, packages, reloads and publishes on
-a real GPU.
+a real GPU — both now confirmed by the acceptance matrix above.
 
-Not yet written: JSON Schemas for job and result documents, and the `validation-datasets/`
-suite specified in issue #2 (its Phase 0 source verification is done and posted there).
+All five acceptance profiles carry committed approvals, so a fresh clone can verify each one
+against a recorded expectation without rebuilding from network.
 
 **Blocked:** all DIMER-side integration. Creating a `Custom / Other` pipeline currently fails
-on a `runtime_dataset_format` not-null constraint — a platform defect with no known fix or
-tracking issue. See DEPLOYMENT.md §5. Nothing in PRs 1–4 depended on it; PR 0's runtime
-probe and every on-platform acceptance step do.
+on a `runtime_dataset_format` not-null constraint — a platform defect with no known fix,
+tracked in #5. See DEPLOYMENT.md §5. Nothing merged here depended on it; PR 0's runtime probe
+and every on-platform acceptance step do.
+
+The remaining platform items are sequenced **#13 → #5 → #11 → #7**: confirm whether the
+Pipeline Builder's Base Model field accepts free text (which decides whether the tier
+sentinel is viable at all), then the `runtime_dataset_format` blocker, then the documented
+upload quota, then resource profiles re-measured on approved hardware. Each needs portal
+access.

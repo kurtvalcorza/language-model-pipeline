@@ -13,6 +13,46 @@
 #     them, never widen them.
 #   - `approval_state` gates production use: experimental -> validated -> production.
 #   - Do not publish `vram_gb` numbers that were not measured on approved hardware.
+#   - An entry with a null `resource_profile` MUST be `internal_only: true` until measured.
+#     Offering a model with no ceiling lets a user pick one that OOMs.
+#
+# What this registry will NOT admit, regardless of licence or hardware:
+#
+#   - **Anything that is not `AutoModelForCausalLM`.** `backend: generic_causal_lm` loads
+#     through that class. A multimodal checkpoint — Hub task `image-text-to-text`, model
+#     class `AutoModelForMultimodalLM` — is not a drop-in, and admitting one would mean a
+#     new backend and a new artifact/serving contract, not a registry row. This is a
+#     structural blocker: a bigger GPU does not fix it.
+#     Worked example, checked 2026-08-22: `aisingapore/Qwen-SEA-LION-v4.5-27B-IT` is MIT
+#     and ungated, so licence is not what stops it. It is `image-text-to-text` on `qwen3_5`
+#     (`AutoModelForMultimodalLM`), and separately 27.8B — ~13.9 GB of 4-bit weights before
+#     activations. The size objection is hardware-specific; the model-class one is not.
+#   - **`custom_code` on the Hub.** Anything whose documented use needs
+#     `trust_remote_code=True` is blocked pending review — see `phi-4-mini-instruct`, and
+#     note that `aisingapore/SEA-LION-v1-7B-IT` is MIT and lists `tl` but carries the same
+#     tag, so it is blocked identically.
+#   - **A base model with no chat template** resolvable by `AutoTokenizer`. Post-trained /
+#     instruct variants only; `chat_template: tokenizer` depends on it.
+#
+# Licence is a separate axis and a judgement call, not a technical gate.
+#
+# Philippine-language coverage, checked 2026-08-22 — the blocker is licence ALONE, and it is
+# worth being precise because an earlier reading of this got it wrong twice. Both SEA-LION v3
+# text models are **ungated** (fetchable with no token), are ordinary `*ForCausalLM`, carry no
+# `custom_code`, and fit this GPU under QLoRA:
+#
+#   aisingapore/Gemma-SEA-LION-v3-9B-IT   Gemma2ForCausalLM   9.2B   license: gemma
+#   aisingapore/Llama-SEA-LION-v3-8B-IT   LlamaForCausalLM    8.0B   license: llama3.1
+#
+# 9.2B at 4-bit is ~4.6 GB of weights — granite-4.1-3b measured 4.69 GB peak under QLoRA, so
+# size is not the objection. Nor is `gemma` a multimodal exclusion: only the *specific*
+# checkpoint google/gemma-3-4b-it is image-text-to-text. google/gemma-2-2b-it and
+# google/gemma-3-1b-it are Gemma2ForCausalLM / Gemma3ForCausalLM and admissible on
+# architecture; they are `gated: manual`, so they need accepted terms and a token.
+#
+# So adding Filipino-capable base models is a decision about accepting the Gemma or Llama 3.1
+# community terms — which travel with derivatives and are not OSI-open — not an engineering
+# problem. Record that decision here when it is made.
 
 schema_version: "1.0"
 
@@ -101,6 +141,101 @@ models:
         measured_at:
           max_sequence_length: 2048
           per_device_batch_size: 1
+
+  olmo2-7b:
+    # Third training lineage after Qwen and Granite, and the strongest evidence that the
+    # capability is model-agnostic rather than Qwen-shaped: fully open weights, data and
+    # training code, from a lab unrelated to either incumbent.
+    enabled: true
+    # internal_only until measured: COMPATIBILITY.md forbids an unmeasured ceiling, and
+    # offering a model whose resource_profile is null lets a user pick one that may OOM.
+    # Flip this off and add the key to dimer-pipeline.json's enum once measured.
+    internal_only: true
+    provider: allenai
+    model_id: allenai/OLMo-2-1124-7B-Instruct
+    revision: 470b1fba1ae01581f270116362ee4aa1b97f4c84
+    license: apache-2.0
+    architecture: causal_lm
+    backend: generic_causal_lm
+    requires_trust_remote_code: false
+    training_methods: [lora, qlora]
+    max_sequence_length: 4096
+    chat_template: tokenizer
+    lora_target_modules: auto
+    serving_profile: peft_adapter
+    approval_state: experimental
+    resource_profile:
+      # Not yet measured. COMPATIBILITY.md forbids publishing an unmeasured ceiling: a
+      # guessed min_vram_gb reads as authoritative and mis-sizes every registration built
+      # on it.
+      lora:
+        min_vram_gb: null
+        measured_on: null
+      qlora:
+        min_vram_gb: null
+        measured_on: null
+
+  smollm3-3b:
+    # Fourth lineage, and a distinct architecture (`smollm3`) rather than another
+    # llama/qwen variant. Small enough to be a cheap second CI model if it proves out.
+    enabled: true
+    # internal_only until measured -- see olmo2-7b.
+    internal_only: true
+    provider: HuggingFaceTB
+    model_id: HuggingFaceTB/SmolLM3-3B
+    revision: a07cc9a04f16550a088caea529712d1d335b0ac1
+    license: apache-2.0
+    architecture: causal_lm
+    backend: generic_causal_lm
+    requires_trust_remote_code: false
+    training_methods: [lora, qlora]
+    max_sequence_length: 4096
+    chat_template: tokenizer
+    lora_target_modules: auto
+    serving_profile: peft_adapter
+    approval_state: experimental
+    resource_profile:
+      lora:
+        min_vram_gb: null
+        measured_on: null
+      qlora:
+        min_vram_gb: null
+        measured_on: null
+
+  gemma-sea-lion-v3-9b:
+    # Philippine-language coverage. Lists `fil` among 13 SEA languages, and is the first
+    # entry chosen for language capability rather than to prove the abstraction.
+    #
+    # LICENCE: `gemma`, NOT OSI-open. The Gemma Terms of Use travel with derivatives, so
+    # anything fine-tuned from this inherits them and the use-restrictions apply downstream.
+    # Kurt accepted those terms on 2026-08-22; that decision is what admits this entry, and
+    # it is recorded here rather than left implicit. Do not treat this as precedent for
+    # apache-2.0-only assumptions elsewhere in the stack.
+    #
+    # Ungated on the Hub (verified 2026-08-22): fetchable with no token, unlike google/*
+    # Gemma, which is `gated: manual`.
+    enabled: true
+    # internal_only until measured -- see olmo2-7b.
+    internal_only: true
+    provider: aisingapore
+    model_id: aisingapore/Gemma-SEA-LION-v3-9B-IT
+    revision: 2b1d9316c945c31e0cedbc56014047cc3bfdfbf5
+    license: gemma
+    architecture: causal_lm
+    backend: generic_causal_lm
+    requires_trust_remote_code: false
+    training_methods: [qlora]
+    max_sequence_length: 4096
+    chat_template: tokenizer
+    lora_target_modules: auto
+    serving_profile: peft_adapter
+    approval_state: experimental
+    resource_profile:
+      # qlora only: 9.2B in bf16 is ~18.5 GB of weights alone, so LoRA cannot fit the
+      # measurement GPU. Listing lora here would advertise a method that always fails.
+      qlora:
+        min_vram_gb: null
+        measured_on: null
 
   qwen3-0.6b:
     # CI / GPU smoke-test model. Not offered to end users: absent from the

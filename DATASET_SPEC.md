@@ -20,13 +20,20 @@ transport-valid can still be large enough to exhaust RAM. An OOM kill is the one
 contract cannot report on: the Job dies without writing a result document, so the user sees
 an infrastructure error rather than a reason.
 
-| Bound | Value | Applies to |
-|---|---|---|
-| `MAX_SPLIT_BYTES` | 512 MiB | each resolved split file |
-| `MAX_DATASET_BYTES` | 1 GiB | all splits together |
-| `MAX_MEMBER_BYTES` | = `MAX_SPLIT_BYTES` | each archive member |
-| `MAX_UNCOMPRESSED_BYTES` | = `MAX_DATASET_BYTES` | total archive expansion |
-| `MAX_LINE_BYTES` | 4 MiB | one record |
+| Bound | Value | Applies to | Override |
+|---|---|---|---|
+| `MAX_SPLIT_BYTES` | 512 MiB | each resolved split file | `LM_MAX_SPLIT_BYTES` |
+| `MAX_DATASET_BYTES` | 1 GiB | all splits together | `LM_MAX_DATASET_BYTES` |
+| `MAX_MEMBER_BYTES` | = `MAX_SPLIT_BYTES` | each archive member | follows |
+| `MAX_UNCOMPRESSED_BYTES` | = `MAX_DATASET_BYTES` | total archive expansion | follows |
+| `MAX_LINE_BYTES` | 4 MiB | one record | — |
+
+> **The two byte values are provisional (issue #11).** The agreed policy is to set them to
+> DIMER's documented maximum upload size, so this pipeline never rejects a dataset the
+> platform itself accepted. That quota has not been read out of the portal yet, and putting
+> an invented number in a shared contract is the failure mode COMPATIBILITY.md exists to
+> prevent. They are conservative in the meantime and overridable by environment variable, so
+> setting the real quota needs no code change.
 
 Two rules follow, and both are load-bearing:
 

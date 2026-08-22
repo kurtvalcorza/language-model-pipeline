@@ -7,6 +7,7 @@ rather than being reimplemented per repo.
 
 from __future__ import annotations
 
+import os
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -29,8 +30,32 @@ REQUIRED_SPLITS = ("train",)
 # multiple of the file size. A dataset that is merely transport-valid must fail with a
 # stable code, not by having the kernel OOM-kill the Job — an OOM kill produces no result
 # document at all, which is the one outcome the contract cannot report on.
-MAX_SPLIT_BYTES = 512 * 1024**2
-MAX_DATASET_BYTES = 1024**3
+#
+# PENDING (issue #11): these are provisional. The agreed policy is to set them to DIMER's
+# documented maximum upload size, so this pipeline never rejects a dataset the platform
+# itself accepted. That quota has not been read out of the portal yet, and inventing a
+# number here would be exactly the kind of unmeasured constant COMPATIBILITY.md forbids.
+# Until then they are conservative and overridable per deployment — no code change needed.
+
+
+def _bound_from_env(name: str, default: int) -> int:
+    """Read a byte bound from the environment, falling back to the conservative default.
+
+    Overridable because the correct value is a property of the deployment's upload quota,
+    not of this source file.
+    """
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+MAX_SPLIT_BYTES = _bound_from_env("LM_MAX_SPLIT_BYTES", 512 * 1024**2)
+MAX_DATASET_BYTES = _bound_from_env("LM_MAX_DATASET_BYTES", 1024**3)
 
 # Archive bounds. Aligned to the split bounds above so an archive cannot smuggle in a
 # member that split resolution would then have to reject after paying to extract it.

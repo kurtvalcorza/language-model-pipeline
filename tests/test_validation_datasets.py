@@ -47,13 +47,24 @@ def test_evaluation_only_data_cannot_be_used_for_training(registry):
     assert "evaluation-only" in str(exc.value) or "disabled" in str(exc.value)
 
 
-def test_gated_sources_are_disabled_until_terms_are_accepted(registry):
+def test_gated_sources_can_never_be_used_for_training(registry):
+    """Terms were accepted for both on 2026-08-22 (issue #10), which changed one thing only.
+
+    Accepting upstream terms makes a source *fetchable*. It does not make it usable: kalahi
+    is the held-out evaluation tier and sea-instruct still has no subsetting policy and no
+    inspected schema. Both must still refuse a training request, for their own reasons.
+    """
     for dataset_id in ("kalahi", "sea-instruct-2602"):
         source = registry.get(dataset_id)
         assert source.gated
-        assert not source.enabled
         with pytest.raises(RegistryError):
             source.require_usable_for_training()
+
+
+def test_accepting_terms_does_not_license_committing_rows(registry):
+    """Fetchable and redistributable are different questions, and only one was answered."""
+    for dataset_id in ("kalahi", "sea-instruct-2602"):
+        assert registry.get(dataset_id).may_commit_rows is False
 
 
 def test_gated_sources_may_not_have_rows_committed(registry):

@@ -57,6 +57,7 @@ def build_manifest(
     digests: dict[str, str],
     counts: dict[str, int],
     selected_indices: list[int],
+    exclude_languages: tuple[str, ...] = (),
     tool_version: str = "1.0",
 ) -> dict[str, Any]:
     """Provenance for one built profile.
@@ -75,7 +76,14 @@ def build_manifest(
         "sourceId": source.source_id,
         "sourceRevision": source.revision,
         "sourceConfig": source.config,
+        # Upstream's own name for the split, and what THIS suite does with it. They differ
+        # for uner-tagalog, whose only published split is `test` and which we deliberately
+        # repurpose as SFT acceptance training material. Recording both is what stops a
+        # later reader treating that run as an independent Tagalog benchmark.
         "sourceSplit": source.split,
+        "pipelineUsage": source.pipeline_usage,
+        "tier": source.tier,
+        "excludeLanguages": sorted(exclude_languages),
         "license": source.license,
         "redistribution": source.redistribution,
         "gated": source.gated,

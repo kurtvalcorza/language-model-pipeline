@@ -29,6 +29,14 @@ class Profile:
     name: str
     count: int | None
     selection: str
+    # Languages this profile deliberately removes before selection. Tier 3 excludes `tl`
+    # so it is independent of Tier 2 by construction rather than by luck — see the
+    # acceptance ladder in validation-datasets/README.md.
+    exclude_languages: tuple[str, ...] = ()
+
+    @property
+    def excludes_languages(self) -> bool:
+        return bool(self.exclude_languages)
 
 
 @dataclass(frozen=True)
@@ -49,6 +57,18 @@ class DatasetSource:
     enabled: bool
     overlaps_with: tuple[str, ...] = ()
     profiles: dict[str, Profile] = field(default_factory=dict)
+    # Acceptance ladder position: 1 English, 2 Filipino, 3 multilingual-excluding-tl,
+    # 4 held-out Filipino evaluation. Tiers 2 and 3 are independent acceptance runs;
+    # tier 4 is the only evaluation tier.
+    tier: int | None = None
+    # How THIS suite uses the source, which is not always what upstream called it.
+    # uner-tagalog publishes only a `test` split and we deliberately repurpose it as SFT
+    # acceptance training material. Both facts are recorded so a later reader cannot mistake
+    # the run for an independent Tagalog benchmark.
+    pipeline_usage: str = "training"
+    # Row field carrying the language code. Required before any language exclusion can be
+    # applied; `None` means unknown, and an exclusion request then fails closed.
+    language_field: str | None = None
 
     @property
     def is_evaluation_only(self) -> bool:
@@ -102,6 +122,7 @@ class DatasetRegistry:
                     name=name,
                     count=(p or {}).get("count"),
                     selection=(p or {}).get("selection", "stable_hash"),
+                    exclude_languages=tuple((p or {}).get("exclude_languages") or ()),
                 )
                 for name, p in (spec.get("profiles") or {}).items()
             }
@@ -123,6 +144,9 @@ class DatasetRegistry:
                 enabled=bool(spec.get("enabled", True)),
                 overlaps_with=tuple(spec.get("overlaps_with") or ()),
                 profiles=profiles,
+                tier=spec.get("tier"),
+                pipeline_usage=spec.get("pipeline_usage", "training"),
+                language_field=spec.get("language_field"),
             )
         return cls(sources, schema_version=str(raw.get("schema_version", "1.0")))
 

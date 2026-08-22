@@ -18,6 +18,7 @@ synthetic/             committed valid fixtures — CI never needs network
   instruction/
 adversarial/           one directory per failure case
   expected-codes.json  the contract: fixture -> stable error code
+approved/              committed expectations: digests + fingerprints, never rows
 build/                 generated profiles (git-ignored; recipes are committed, not rows)
 ```
 
@@ -72,24 +73,99 @@ acceptance dataset.
 | Source | Licence | Gated | Status |
 |---|---|---|---|
 | `dolly-15k` | CC-BY-SA-3.0 | no | enabled |
-| `uner-tagalog` | CC-BY-SA-4.0 | no | enabled — **upstream split is `test`, not train** |
-| `uner-multilingual` | CC-BY-SA-4.0 | no | enabled |
-| `sea-instruct-2602` | ODC-BY | yes | disabled pending terms acceptance |
-| `kalahi` | CC-BY-4.0 | yes | disabled; **evaluation only, never training** |
+| `uner-tagalog` | CC-BY-SA-4.0 | no | enabled — **upstream split is `test`**, used as training |
+| `uner-multilingual` | CC-BY-SA-4.0 | no | enabled; tier-3 builds blocked on `language_field` |
+| `sea-instruct-2602` | ODC-BY | yes | terms accepted; **still disabled** — no subsetting policy, no inspected schema |
+| `kalahi` | CC-BY-4.0 | yes | terms accepted; fetchable — **evaluation only, never training** |
 
-Two policies are enforced in code, not just documented: an evaluation-only source cannot be
-requested for training, and a disabled or gated source fails before anything is fetched.
+Upstream terms for both gated sources were accepted on 2026-08-22 (issue #10). That changed
+exactly one thing: they are now *fetchable*. It did not make them *usable*, and it did not
+make their rows *redistributable* — three separate questions, and only the first was answered.
 
-## Known overlap
+Three policies are enforced in code, not merely documented: an evaluation-only source cannot
+be requested for training, a disabled source fails before anything is fetched, and a gated
+source may never have its converted rows committed here.
 
-`uner-tagalog` converts the Tagalog portion of Universal NER v1; `uner-multilingual`
-converts the same v1 corpus and includes `tl`. They are therefore **not independent
-acceptance tiers**, and the registry records the overlap in both directions. `build` warns
-when a source declares one. A model trained on the multilingual profile and then "accepted"
-on the Tagalog profile is being evaluated on its own training data.
+## The acceptance ladder
 
-Resolving this needs a decision: a disjointness check, excluding `tl` from the multilingual
-profile, or documented acceptance that the tiers are related.
+Four tiers, each answering a different question. Decided 2026-08-22, closing issue #6.
+
+| Tier | Source | Question it answers |
+|---|---|---|
+| 1 | `dolly-15k` | Does ordinary English SFT work? |
+| 2 | `uner-tagalog` | Does the Philippine-language path work? |
+| 3 | `uner-multilingual`, **excluding `tl`** | Does general multilingual handling work, independently of tier 2? |
+| 4 | `kalahi` | Held-out Filipino **evaluation**. Never training. |
+
+Tiers 1–3 are pipeline **acceptance** runs — they establish that training mechanics work on
+that kind of text. Tier 4 is the only **evaluation** tier. Keeping those two ideas apart is
+the point of the ladder: UNER Tagalog validates training mechanics using Filipino text,
+while Kalahi independently evaluates the resulting model.
+
+### Independence is structural, then proved
+
+`uner-tagalog` converts the Tagalog portion of Universal NER v1, and `uner-multilingual`
+converts the same v1 corpus including `tl`. Rather than build both and then detect the
+overlap, **tier 3 excludes `tl`** — so the tiers mean different things by construction.
+
+The exclusion then gets a continuous guard, because a future source bump or converter change
+could quietly reintroduce the leakage:
+
+```bash
+python -m validation_datasets disjoint uner-tagalog:full uner-multilingual:multi_500
+```
+
+It compares committed fingerprint files, so it needs no network and no build, and CI can
+enforce it on every push. The filter itself fails closed: an unknown language field, a field
+missing from the fetched rows, or an exclusion that removes nothing all raise rather than
+building a "tier 3" profile that still contains Tagalog.
+
+> **Tier 3 profiles cannot be built yet.** `language_field` for
+> `universalner/uner_llm_instructions` has not been confirmed against the pinned revision,
+> and `convert.py` does not guess field names. Until it is recorded, any tier-3 build fails
+> with an actionable error instead of producing a profile that silently skipped the filter.
+
+### Tier 2 uses an upstream `test` split, deliberately
+
+`uner_llm_inst_tagalog` publishes only a `test` split. This suite imports it as **source
+material for an SFT acceptance run**, not as an evaluation set, and the manifest records both
+facts side by side:
+
+```
+source_split:    test        # what upstream calls it
+pipeline_usage:  training    # what we do with it
+```
+
+The deterministic tooling derives its own train/validation partition from it as needed.
+**Results on this source must never later be reported as an independent Tagalog quality
+benchmark** — that role belongs to tier 4.
+
+## Approved profiles
+
+`build/` is git-ignored, so a manifest written there only ever proved that a run agreed with
+itself. A fresh clone needs a committed expectation to check a rebuild against, or
+"the same pinned source still produces the dataset we approved" is not a checkable claim.
+
+Each approved profile commits two small files, neither containing dataset rows:
+
+```
+approved/<dataset>/<profile>.json           digests, counts, pinned revision, usage
+approved/<dataset>/<profile>.fingerprints   sorted canonical fingerprints, truncated
+```
+
+`build` and `verify` both compare against the committed `.json` and fail on any difference —
+a moved revision, a changed converter version, a different selected-row set, a changed split
+digest or example count. Recording a new expectation is a separate, deliberate command:
+
+```bash
+python -m validation_datasets approve dolly-15k --profile smoke_100 --date 2026-08-22
+```
+
+Separate on purpose. If `build` wrote the approval itself, the expectation would follow the
+code around instead of pinning it, and a converter change would re-approve its own output.
+
+Fingerprints are truncated to 64 bits. A collision at this suite's scale is ~1e-13, and would
+only ever report an overlap that is not there — the gate fails safe.
 
 ## Usage
 
@@ -98,9 +174,12 @@ python -m validation_datasets list
 python -m validation_datasets build   dolly-15k --profile smoke_100
 python -m validation_datasets verify  dolly-15k --profile smoke_100
 python -m validation_datasets package dolly-15k --profile smoke_100
+python -m validation_datasets approve dolly-15k --profile smoke_100 --date 2026-08-22
+python -m validation_datasets disjoint uner-tagalog:full uner-multilingual:multi_500
 ```
 
-Fetching requires `pip install datasets` and network access.
+`build` and `approve` require `pip install datasets` and network access. `verify` and
+`disjoint` run offline against committed files, which is what lets CI enforce them.
 
 ## Verified end to end
 
@@ -113,4 +192,10 @@ built 100 examples, sha256 0dacfbf2af8b3c54...
 rebuild digest identical
 package sha256 62913fa53fb407da...
 validator: 8/8 checks pass, median 112 tokens, longest 943 of 4096
+approved 2026-08-22 -> approved/dolly-15k/smoke_100.json
 ```
+
+The drift gate was also exercised against its failure case, not only its success case: a
+build tampered so that its own manifest still agreed with it — the exact scenario the
+git-ignored manifest could not catch — was rejected by `verify` with exit 1 and a named
+digest mismatch.

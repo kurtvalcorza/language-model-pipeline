@@ -11,6 +11,8 @@ schema_version: "1.0"
 
 sources:
   dolly-15k:
+    tier: 1                            # Tier 1 — does ordinary English SFT work?
+    pipeline_usage: training
     provider: databricks
     source_type: huggingface
     source_id: databricks/databricks-dolly-15k
@@ -33,6 +35,12 @@ sources:
       smoke_500: {count: 500, selection: stable_hash}
 
   uner-tagalog:
+    tier: 2                            # Tier 2 — does the Philippine-language path work?
+    # Upstream calls this split `test`; this suite deliberately repurposes it as SFT
+    # acceptance TRAINING material. Both facts are recorded, and the manifest carries both,
+    # so a later reader cannot mistake an acceptance run for an independent Tagalog
+    # benchmark. Held-out Filipino EVALUATION is tier 4 (kalahi), never this.
+    pipeline_usage: training
     provider: universalner
     source_type: huggingface
     source_id: universalner/uner_llm_inst_tagalog
@@ -61,6 +69,12 @@ sources:
       full: {count: 220, selection: all}
 
   uner-multilingual:
+    tier: 3                            # Tier 3 — multilingual handling, independent of tl
+    pipeline_usage: training
+    # Which row field carries the language code. UNVERIFIED against the pinned revision:
+    # until it is confirmed, any profile declaring exclude_languages fails closed rather
+    # than building a tier-3 profile that silently still contains Tagalog. See issue #6.
+    language_field: null
     provider: universalner
     source_type: huggingface
     source_id: universalner/uner_llm_instructions
@@ -72,18 +86,26 @@ sources:
     gated: false
     redistribution: share_alike
     intended_use: [multilingual_acceptance]
+    # `tl` is present upstream and is removed by every profile above.
     languages: [ceb, da, de, en, hr, pt, ru, sk, sr, sv, tl, zh]
     source_schema: {inputs: str, targets: str}
     canonical_schema: messages
     conversion_version: 1
     verified_on: "2026-08-21"
     approval_state: experimental
+    # Resolved 2026-08-22 (issue #6): the tiers are made independent BY CONSTRUCTION —
+    # tier 3 excludes `tl` — and the disjointness is then proved continuously by the
+    # committed-fingerprint gate (`python -m validation_datasets disjoint`). Detecting an
+    # overlap after building both was the weaker option; this removes it at the source and
+    # keeps a regression guard against a future source or converter change reintroducing it.
     overlaps_with: [uner-tagalog]
     profiles:
-      multi_500: {count: 500, selection: stable_hash}
-      multi_2000: {count: 2000, selection: stable_hash}
+      multi_500: {count: 500, selection: stable_hash, exclude_languages: [tl]}
+      multi_2000: {count: 2000, selection: stable_hash, exclude_languages: [tl]}
 
   sea-instruct-2602:
+    tier: 3
+    pipeline_usage: training
     provider: aisingapore
     source_type: huggingface
     source_id: aisingapore/SEA-Instruct-2602
@@ -93,6 +115,9 @@ sources:
     license: ODC-BY                    # verified 2026-08-21; carries attribution duties
     license_url: https://huggingface.co/datasets/aisingapore/SEA-Instruct-2602
     gated: true
+    # Upstream terms accepted on the owner's HF account, recorded from owner confirmation
+    # 2026-08-22 (issue #10). Being fetchable is not the same as being usable: see below.
+    terms_accepted: true
     redistribution: unclear            # commit recipes and digests only, never rows
     intended_use: [multilingual_acceptance]
     languages: [en, id, vi, th, ta, tl, ms, my, km, lo, zh]
@@ -100,13 +125,17 @@ sources:
     canonical_schema: messages
     conversion_version: 0
     verified_on: "2026-08-21"
-    # DISABLED: requires terms acceptance, and 1M-10M rows needs an agreed subsetting
-    # policy before any profile is defined. Never a required CI dependency.
+    # DISABLED — the blocker is no longer terms. Two things remain: 1M-10M rows needs an
+    # agreed subsetting policy before any profile is defined, and `source_schema` is still
+    # uninspected so there is no converter (convert.py refuses to guess field names).
+    # Never a required CI dependency.
     enabled: false
     approval_state: blocked
     profiles: {}
 
   kalahi:
+    tier: 4                            # Tier 4 — the ONLY evaluation tier. Never training.
+    pipeline_usage: evaluation
     provider: aisingapore
     source_type: huggingface
     source_id: aisingapore/Cultural-Evaluation-Kalahi
@@ -116,6 +145,9 @@ sources:
     license: CC-BY-4.0
     license_url: https://huggingface.co/datasets/aisingapore/Cultural-Evaluation-Kalahi
     gated: true                        # the spec omitted this; it is gated
+    # Upstream terms accepted on the owner's HF account, recorded from owner confirmation
+    # 2026-08-22 (issue #10).
+    terms_accepted: true
     redistribution: unclear
     # EVALUATION ONLY. Never an SFT training profile, and never overlapping one.
     intended_use: [evaluation_only]
@@ -126,6 +158,10 @@ sources:
     canonical_schema: evaluation
     conversion_version: 0
     verified_on: "2026-08-21"
-    enabled: false                     # requires terms acceptance
-    approval_state: blocked
+    # Fetchable now that terms are accepted. Still has no profiles: this is the held-out
+    # evaluation tier, and `intended_use: [evaluation_only]` makes require_usable_for_training
+    # refuse it regardless of this flag. An evaluation loader is MCQ-shaped (SEA-HELM
+    # variant), which is separate work from the SFT path.
+    enabled: true
+    approval_state: experimental
     profiles: {}

@@ -65,8 +65,16 @@ acceptance dataset.
   pairs. Each pair survives a draw of `n` with probability `(n/54957)²`, so `multi_2000`
   expects ~5 collapsed pairs and records 1997/2000, while `multi_500` expects 0.31 and
   records 500/500. The profiles are not behaving differently; the smaller one is too small
-  to hit it. Deduplicating would mean giving up occurrence-based identity, which is the
-  thing keeping selection independent of upstream ordering.
+  to hit it.
+
+  Deduplicating is available and would stay order-independent — group by canonical
+  fingerprint first, then sample unique contents. The choice is therefore about the
+  **sampling unit**, not about determinism: these profiles sample *source rows* and preserve
+  upstream multiplicity, where a deduplicated profile would sample *unique canonical
+  contents*. For pipeline **acceptance** — does training mechanically work on this kind of
+  text — the upstream row population is the honest thing to draw from, and 0.15% redundancy
+  does not justify a different profile. A quality benchmark would answer this differently,
+  which is one more reason this suite is not one.
 - **Profiles are salted by name**, so `smoke_500` is not a superset of `smoke_100` — a nested
   prefix would make the larger profile's extra rows systematically unlike its first hundred.
 - **Canonical serialization is pinned**: sorted keys, no ASCII escaping, LF endings.

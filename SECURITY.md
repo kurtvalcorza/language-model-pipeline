@@ -94,3 +94,11 @@ loop and never instantiates `Trainer` — there is no `torch.load` call anywhere
 `src/finetuner`. `CVE-2026-4372` is a genuine config-loading path, mitigated rather than
 unreachable, because configs are fetched only for registry-approved models at immutable
 40-hex revisions that users cannot override.
+
+State what a mitigation buys, and what it does not. Pinning means a user cannot redirect the
+Job to another revision and upstream cannot silently change the bytes we fetch — content
+addressing gives **immutability, not trustworthiness**. It does not establish that the
+pinned commit was benign when it was pinned. That residual supply-chain assumption about the
+publishers belongs *in* the exception, because it is the part that could stop being true:
+a publisher compromise, or a new entry from a less established source, is grounds to
+reassess the exception rather than renew it.

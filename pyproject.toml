@@ -27,7 +27,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-lmpipeline = ["data/*.yaml"]
+lmpipeline = ["data/*.yaml", "schemas/*.json"]
 
 [tool.ruff]
 line-length = 100

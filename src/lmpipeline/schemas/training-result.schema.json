@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kurtvalcorza/language-model-pipeline/schemas/training-result.schema.json",
+  "title": "result.json emitted by language-model-finetuner",
+  "description": "Validated against documents produced by real training runs, success and failure alike. The success branch is the load-bearing part: it is what makes an artifact referenceable after the fact.",
+
+  "allOf": [
+    {"$ref": "result-common.schema.json#/$defs/resultBase"},
+    {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "languageModelPipeline": {
+              "type": "object",
+              "properties": {
+                "stage": {"const": "training"}
+              },
+              "required": ["stage"]
+            }
+          },
+          "required": ["languageModelPipeline"]
+        }
+      }
+    },
+    {
+      "description": "A successful run must describe what it produced and what it was produced from. Without both, the artifact cannot be traced back to a model, a revision, or a dataset.",
+      "if": {
+        "type": "object",
+        "properties": {"successful": {"const": true}},
+        "required": ["successful"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "languageModelPipeline": {
+                "type": "object",
+                "properties": {
+                  "code": {"const": "TRAINING_SUCCEEDED"},
+
+                  "artifact": {
+                    "type": "object",
+                    "properties": {
+                      "format": {"type": "string", "enum": ["peft_adapter"]},
+                      "path": {"type": "string", "minLength": 1},
+                      "fileCount": {"type": "integer", "minimum": 1},
+                      "totalBytes": {"type": "integer", "minimum": 1},
+                      "files": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "path": {"type": "string", "minLength": 1},
+                            "bytes": {"type": "integer", "minimum": 0},
+                            "sha256": {
+                              "type": "string",
+                              "description": "Every published file is hashed. A manifest entry without one cannot detect a truncated write.",
+                              "pattern": "^[0-9a-f]{64}$"
+                            }
+                          },
+                          "required": ["path", "bytes", "sha256"],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": ["format", "path", "fileCount", "totalBytes", "files"]
+                  },
+
+                  "provenance": {
+                    "type": "object",
+                    "description": "What was actually loaded and run, not what was requested.",
+                    "properties": {
+                      "baseModel": {"type": "string", "minLength": 1},
+                      "baseModelRevision": {
+                        "type": "string",
+                        "description": "The revision actually loaded. A branch name here would make the artifact unreproducible.",
+                        "pattern": "^[0-9a-f]{40}$"
+                      },
+                      "modelKey": {"type": "string", "minLength": 1},
+                      "quantized": {"type": "boolean"},
+                      "datasetDigest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                      "trustRemoteCode": {
+                        "description": "Recorded so an artifact built with remote code execution enabled is identifiable after the fact.",
+                        "const": false
+                      }
+                    },
+                    "required": [
+                      "baseModel",
+                      "baseModelRevision",
+                      "modelKey",
+                      "quantized",
+                      "datasetDigest",
+                      "trustRemoteCode"
+                    ]
+                  }
+                },
+                "required": ["code", "artifact", "provenance"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "A failed run must not claim the success code, and must not advertise an artifact it did not publish.",
+      "if": {
+        "type": "object",
+        "properties": {"successful": {"const": false}},
+        "required": ["successful"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "languageModelPipeline": {
+                "type": "object",
+                "properties": {
+                  "code": {"not": {"const": "TRAINING_SUCCEEDED"}},
+                  "artifact": {
+                    "type": "object",
+                    "not": {"required": ["path"]}
+                  }
+                },
+                "required": ["code"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -64,6 +64,40 @@ jobs:
           print("dev extra is network-free")
           PY
 
+  schemas:
+    # The contract documents, checked as a gate of their own rather than only inside the
+    # test suite — the consumer repositories validate their real emitted documents against
+    # these same files, so a schema that stops matching here breaks three repos.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -e '.[dev]'
+
+      - name: Every schema is a valid schema
+        run: |
+          python - <<'PY'
+          from jsonschema import Draft202012Validator
+          from lmpipeline.schema import SCHEMA_NAMES, load_schema
+          for name in SCHEMA_NAMES:
+              Draft202012Validator.check_schema(load_schema(name))
+              print(f"{name}.schema.json is a valid Draft 2020-12 schema")
+          PY
+
+      - name: The committed registry validates against its schema
+        run: |
+          python - <<'PY'
+          import yaml
+          from lmpipeline.registry import DEFAULT_REGISTRY_PATH
+          from lmpipeline.schema import MODEL_REGISTRY, validate_document
+          document = yaml.safe_load(DEFAULT_REGISTRY_PATH.read_text(encoding="utf-8"))
+          validate_document(MODEL_REGISTRY, document)
+          print(f"model-registry.yaml validates ({len(document['models'])} entries)")
+          PY
+
   line-endings:
     # The vendor drift gate hashes file bytes, so a CRLF checkout and an LF checkout
     # disagree about a byte-identical tree. `.gitattributes` pins `* text=auto eol=lf` to

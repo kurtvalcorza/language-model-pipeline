@@ -1,0 +1,305 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kurtvalcorza/language-model-pipeline/schemas/model-registry.schema.json",
+  "title": "model-registry.yaml",
+  "description": "The runtime authority for which base models may be fine-tuned. Two invariants that were previously asserted only in tests are structural here: an enabled entry pins an immutable commit SHA, and a recorded VRAM figure names the hardware AND the configuration it was measured at.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "models": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$comment": "Keys are the model_key values the finetuner's dimer-pipeline.json enum offers, so they must be safe to place in an enum and in a filename.",
+        "pattern": "^[a-z0-9][a-z0-9.-]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/model"
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "models"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "measuredAt": {
+      "type": "object",
+      "description": "The configuration a measurement was taken at. A profile measured at 2048x1 says nothing about a 512x2 job, and applying it anyway refuses work that demonstrably runs \u2014 which is exactly what happened when these numbers first landed.",
+      "properties": {
+        "max_sequence_length": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "per_device_batch_size": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "max_sequence_length",
+        "per_device_batch_size"
+      ],
+      "additionalProperties": false
+    },
+    "resourceProfile": {
+      "type": "object",
+      "properties": {
+        "min_vram_gb": {
+          "description": "null means UNMEASURED, which is not the same as unlimited: the job proceeds and a structured RESOURCE_OOM is the backstop. Never publish a figure that was not measured on approved hardware.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "measured_on": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 8
+        },
+        "measured_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/measuredAt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "min_vram_gb"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$comment": "The invariant: a number without its provenance is an unfalsifiable claim.",
+          "if": {
+            "type": "object",
+            "properties": {
+              "min_vram_gb": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "min_vram_gb"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "measured_on": {
+                "type": "string",
+                "minLength": 8
+              },
+              "measured_at": {
+                "$ref": "#/$defs/measuredAt"
+              }
+            },
+            "required": [
+              "measured_on",
+              "measured_at"
+            ]
+          }
+        }
+      ]
+    },
+    "model": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "internal_only": {
+          "type": "boolean",
+          "description": "Reachable by the test suite but absent from the Workbench form's enum."
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_id": {
+          "type": "string",
+          "pattern": "^[^/]+/[^/]+$"
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "null is permitted ONLY for a disabled entry, which is a placeholder that has not been pinned. Enabled entries are held to a 40-character commit SHA by the branch below."
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        },
+        "architecture": {
+          "type": "string",
+          "enum": [
+            "causal_lm"
+          ]
+        },
+        "backend": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requires_trust_remote_code": {
+          "type": "boolean"
+        },
+        "training_methods": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "lora",
+              "qlora"
+            ]
+          },
+          "description": "May be empty for a disabled entry that offers nothing yet."
+        },
+        "max_sequence_length": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "chat_template": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lora_target_modules": {
+          "oneOf": [
+            {
+              "type": "string",
+              "const": "auto"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "serving_profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "approval_state": {
+          "type": "string",
+          "enum": [
+            "blocked",
+            "experimental",
+            "validated",
+            "production"
+          ],
+          "description": "`blocked` is a real state, not an absence: it records that an entry was examined and refused, e.g. pending the remote-code review SECURITY.md requires."
+        },
+        "resource_profile": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "lora",
+              "qlora"
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/resourceProfile"
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "provider",
+        "model_id",
+        "revision",
+        "license",
+        "architecture",
+        "backend",
+        "requires_trust_remote_code",
+        "training_methods",
+        "max_sequence_length",
+        "approval_state"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$comment": "Everything an entry must actually have before it can be selected at runtime. Disabled entries are placeholders and are held to none of it.",
+          "if": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "revision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "max_sequence_length": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "training_methods": {
+                "type": "array",
+                "minItems": 1
+              }
+            },
+            "required": [
+              "revision",
+              "max_sequence_length",
+              "training_methods",
+              "resource_profile"
+            ]
+          }
+        },
+        {
+          "$comment": "trust_remote_code executes arbitrary code from the Hub at load time. Such an entry stays disabled pending security review; see SECURITY.md.",
+          "if": {
+            "type": "object",
+            "properties": {
+              "requires_trust_remote_code": {
+                "const": true
+              }
+            },
+            "required": [
+              "requires_trust_remote_code"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "const": false
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

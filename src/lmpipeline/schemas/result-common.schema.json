@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kurtvalcorza/language-model-pipeline/schemas/result-common.schema.json",
+  "title": "Shared shape of every DIMER result document",
+  "description": "The OUTER object is DIMER's own documented contract — Workbench reads and renders successful, message, datasetSummary, checks[] and metadata. This pipeline's richer fields are NESTED under metadata.languageModelPipeline rather than substituted, so nothing the platform consumes is displaced. Definitions here are shared by the validation and training result schemas; neither is meant to be used directly.",
+
+  "$defs": {
+    "check": {
+      "type": "object",
+      "description": "One named check, rendered as a row in the Workbench UI.",
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "successful": {"type": "boolean"},
+        "message": {"type": "string"}
+      },
+      "required": ["name", "successful", "message"],
+      "additionalProperties": false
+    },
+
+    "code": {
+      "type": "string",
+      "description": "Stable machine-readable outcome code. Screaming snake case so operators can filter by prefix (DATASET_*, MODEL_*, CONFIG_*, RESOURCE_*, ARTIFACT_*, RUNTIME_*).",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "minLength": 3
+    },
+
+    "platformMetadata": {
+      "type": "object",
+      "description": "The metadata block DIMER itself consumes.",
+      "properties": {
+        "template": {"type": "string", "minLength": 1},
+        "taskType": {"type": "string", "minLength": 1},
+        "supportedDatasetFormat": {"type": "string", "minLength": 1},
+
+        "classNames": {
+          "type": "array",
+          "description": "MANDATORY per the portal checklist, with its own named failure mode there. A language-model SFT run has no classes and emits [] — which the portal explicitly allows. It must be present and an array; it must never be omitted or null.",
+          "items": {"type": "string"}
+        },
+        "classCount": {"type": "integer", "minimum": 0},
+
+        "languageModelPipeline": {"$ref": "#/$defs/extensions"}
+      },
+      "required": [
+        "template",
+        "taskType",
+        "supportedDatasetFormat",
+        "classNames",
+        "classCount",
+        "languageModelPipeline"
+      ]
+    },
+
+    "extensions": {
+      "type": "object",
+      "description": "This pipeline's own fields. Nested deliberately: everything added here is invisible to the platform's renderer and therefore cannot displace a field it needs.",
+      "properties": {
+        "schemaVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+        "stage": {"type": "string", "enum": ["validation", "training"]},
+        "code": {"$ref": "#/$defs/code"},
+        "metrics": {"type": "object"},
+        "artifact": {"type": "object"},
+        "provenance": {"type": "object"},
+        "timing": {"type": "object"},
+        "resources": {"type": "object"},
+        "diagnostics": {"type": "object"},
+        "details": {"type": "object"}
+      },
+      "required": [
+        "schemaVersion",
+        "stage",
+        "code",
+        "metrics",
+        "artifact",
+        "provenance",
+        "timing",
+        "resources",
+        "diagnostics",
+        "details"
+      ],
+      "additionalProperties": false
+    },
+
+    "resultBase": {
+      "type": "object",
+      "properties": {
+        "successful": {"type": "boolean"},
+        "message": {"type": "string", "minLength": 1},
+        "datasetSummary": {"type": "object"},
+        "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}},
+        "metadata": {"$ref": "#/$defs/platformMetadata"}
+      },
+      "required": ["successful", "message", "datasetSummary", "checks", "metadata"],
+      "additionalProperties": false
+    }
+  }
+}

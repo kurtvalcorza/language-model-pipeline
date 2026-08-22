@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kurtvalcorza/language-model-pipeline/schemas/validation-result.schema.json",
+  "title": "result.json emitted by language-model-dataset-validator",
+  "description": "Validated against documents produced by real validate() runs, success and failure alike — not against hand-authored examples. A schema checked only against samples written to satisfy it proves nothing about what the container emits.",
+
+  "allOf": [
+    {"$ref": "result-common.schema.json#/$defs/resultBase"},
+    {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "languageModelPipeline": {
+              "type": "object",
+              "properties": {
+                "stage": {"const": "validation"}
+              },
+              "required": ["stage"]
+            }
+          },
+          "required": ["languageModelPipeline"]
+        }
+      }
+    },
+    {
+      "description": "A successful validation must carry at least one check. A pass with no evidence is indistinguishable from a run that did nothing.",
+      "if": {
+        "type": "object",
+        "properties": {"successful": {"const": true}},
+        "required": ["successful"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "checks": {"type": "array", "minItems": 1},
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "languageModelPipeline": {
+                "type": "object",
+                "properties": {
+                  "code": {"const": "VALIDATION_SUCCEEDED"},
+                  "provenance": {
+                    "type": "object",
+                    "description": "A pass names the model it validated against, pinned. Otherwise the result cannot be tied to what it approved.",
+                    "properties": {
+                      "baseModel": {"type": "string", "minLength": 1},
+                      "baseModelRevision": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+                    },
+                    "required": ["baseModel", "baseModelRevision"]
+                  }
+                },
+                "required": ["code", "provenance"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "A failure must not claim the success code, and every check it reports must be consistent with the outcome.",
+      "if": {
+        "type": "object",
+        "properties": {"successful": {"const": false}},
+        "required": ["successful"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "languageModelPipeline": {
+                "type": "object",
+                "properties": {
+                  "code": {"not": {"const": "VALIDATION_SUCCEEDED"}}
+                },
+                "required": ["code"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

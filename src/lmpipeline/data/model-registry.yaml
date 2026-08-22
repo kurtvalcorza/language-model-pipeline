@@ -1,0 +1,157 @@
+# Canonical model registry for the DIMER language-model fine-tuning capability.
+#
+# This file is the runtime authority for which base models may be fine-tuned. The DIMER
+# Pipeline Builder's "Base Model" field is display/provenance metadata only — see
+# DEPLOYMENT.md. The authoritative runtime selector is `model_key`, supplied through
+# DIMER_PREPROCESSING_ARGS_JSON and constrained to this file's keys by the finetuner's
+# dimer-pipeline.json enum.
+#
+# Rules (see SECURITY.md):
+#   - `revision` MUST be an immutable commit SHA. Never `main`, never a tag.
+#   - `requires_trust_remote_code: true` entries stay `enabled: false` pending security review.
+#   - `max_sequence_length` and `resource_profile` are hard ceilings. User config may narrow
+#     them, never widen them.
+#   - `approval_state` gates production use: experimental -> validated -> production.
+#   - Do not publish `vram_gb` numbers that were not measured on approved hardware.
+
+schema_version: "1.0"
+
+models:
+  qwen3-1.7b:
+    enabled: true
+    provider: Qwen
+    model_id: Qwen/Qwen3-1.7B
+    revision: 70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+    license: apache-2.0
+    architecture: causal_lm
+    backend: generic_causal_lm
+    requires_trust_remote_code: false
+    training_methods: [lora, qlora]
+    max_sequence_length: 4096
+    chat_template: tokenizer
+    lora_target_modules: auto
+    serving_profile: peft_adapter
+    approval_state: experimental
+    resource_profile:
+      # Measured. See COMPATIBILITY.md for method and caveats.
+      lora:
+        # Exceeded this 11.94 GB GPU (16.29 GB peak, driver spilled to host RAM at
+        # 30 tok/s vs 341 for qlora). Not a valid measurement — needs a larger GPU.
+        min_vram_gb: null
+        measured_on: null
+      qlora:
+        min_vram_gb: 9.3
+        measured_on: "RTX 5070 Ti Laptop 11.94GB, seq2048 bs1, 2026-08-21"
+        measured_at:
+          max_sequence_length: 2048
+          per_device_batch_size: 1
+
+  qwen3-4b:
+    enabled: true
+    provider: Qwen
+    model_id: Qwen/Qwen3-4B
+    revision: 1cfa9a7208912126459214e8b04321603b3df60c
+    license: apache-2.0
+    architecture: causal_lm
+    backend: generic_causal_lm
+    requires_trust_remote_code: false
+    training_methods: [lora, qlora]
+    max_sequence_length: 4096
+    chat_template: tokenizer
+    lora_target_modules: auto
+    serving_profile: peft_adapter
+    approval_state: experimental
+    resource_profile:
+      lora:
+        # Out of memory on this 11.94 GB GPU. Needs measurement on larger hardware.
+        min_vram_gb: null
+        measured_on: null
+      qlora:
+        min_vram_gb: 11.5
+        measured_on: "RTX 5070 Ti Laptop 11.94GB, seq2048 bs1, 2026-08-21"
+        measured_at:
+          max_sequence_length: 2048
+          per_device_batch_size: 1
+
+  granite-4.1-3b:
+    # P1 abstraction proof. Adding this model must not require a forked trainer.
+    # Post-trained variant (NOT granite-4.1-3b-base) so a chat template is present.
+    enabled: true
+    provider: ibm-granite
+    model_id: ibm-granite/granite-4.1-3b
+    revision: c0650403e44e78ec0262dab1c90914c65b196c4e
+    license: apache-2.0
+    architecture: causal_lm
+    backend: generic_causal_lm
+    requires_trust_remote_code: false
+    training_methods: [lora, qlora]
+    max_sequence_length: 4096
+    chat_template: tokenizer
+    lora_target_modules: auto
+    serving_profile: peft_adapter
+    approval_state: experimental
+    resource_profile:
+      lora:
+        # Exceeded this GPU (24.35 GB peak, spilled, 9.1 tok/s vs 185 for qlora).
+        min_vram_gb: null
+        measured_on: null
+      qlora:
+        min_vram_gb: 8.7
+        measured_on: "RTX 5070 Ti Laptop 11.94GB, seq2048 bs1, 2026-08-21"
+        measured_at:
+          max_sequence_length: 2048
+          per_device_batch_size: 1
+
+  qwen3-0.6b:
+    # CI / GPU smoke-test model. Not offered to end users: absent from the
+    # dimer-pipeline.json enum, so it is unreachable from the Workbench form.
+    enabled: true
+    internal_only: true
+    provider: Qwen
+    model_id: Qwen/Qwen3-0.6B
+    revision: c1899de289a04d12100db370d81485cdf75e47ca
+    license: apache-2.0
+    architecture: causal_lm
+    backend: generic_causal_lm
+    requires_trust_remote_code: false
+    training_methods: [lora, qlora]
+    max_sequence_length: 2048
+    chat_template: tokenizer
+    lora_target_modules: auto
+    serving_profile: peft_adapter
+    approval_state: experimental
+    resource_profile:
+      lora:
+        # Fits, but only just: 11.89 GB reserved of 11.94 GB available.
+        min_vram_gb: 13.3
+        measured_on: "RTX 5070 Ti Laptop 11.94GB, seq2048 bs1, 2026-08-21"
+        measured_at:
+          max_sequence_length: 2048
+          per_device_batch_size: 1
+      qlora:
+        min_vram_gb: null
+        measured_on: null
+
+  phi-4-mini-instruct:
+    # DISABLED. microsoft/Phi-4-mini-instruct carries the `custom_code` tag on the Hub and
+    # its documented usage requires trust_remote_code=True. Blocked pending the deliberate
+    # remote-code review required by SECURITY.md. Do not flip `enabled` without it.
+    enabled: false
+    provider: microsoft
+    model_id: microsoft/Phi-4-mini-instruct
+    revision: null
+    license: mit
+    architecture: causal_lm
+    backend: generic_causal_lm
+    requires_trust_remote_code: true
+    training_methods: []
+    max_sequence_length: null
+    chat_template: tokenizer
+    lora_target_modules: auto
+    serving_profile: peft_adapter
+    approval_state: blocked
+    resource_profile:
+      # Disabled entry; never measured.
+      lora:
+        min_vram_gb: null
+        measured_on: null

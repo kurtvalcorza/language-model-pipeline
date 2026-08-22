@@ -1,0 +1,129 @@
+name: CI
+
+# Every gate here already existed as something a person ran locally. That is precisely the
+# problem it solves: a gate that only runs when someone remembers is not a gate.
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Per ref, so a new push supersedes an in-flight run instead of queueing behind it.
+  # Deliberately NOT workflow-level across refs, which would cancel unrelated branches.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor from requires-python and the version the images actually run. A
+        # single version would let a 3.10-incompatible syntax reach the containers.
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: pip install -e '.[dev]'
+
+      - name: Lint
+        # Before the tests: ruff caught a `return X from exc` syntax error that the whole
+        # suite passed over, because no test imported that module.
+        run: ruff check .
+
+      - name: Tests
+        run: pytest -p no:cacheprovider
+
+      - name: Prove the suite needs no network
+        # The fixture corpus is committed and the tests use a fake tokenizer specifically so
+        # this holds. `datasets` is a `fetch` extra and must never become a test dependency.
+        #
+        # Runs once, not per version: this is a property of pyproject.toml, identical on
+        # every interpreter. It also needs tomllib, which is stdlib only from 3.11 — a
+        # detail that made the step itself fail on the 3.10 leg, which is precisely the
+        # kind of thing the version matrix is there to surface.
+        if: matrix.python-version == '3.12'
+        run: |
+          python - <<'PY'
+          import tomllib, pathlib, sys
+          cfg = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))
+          dev = set(cfg["project"]["optional-dependencies"]["dev"])
+          leaked = {d for d in dev if d.split(">=")[0].split("==")[0] in {"datasets", "huggingface-hub", "transformers"}}
+          if leaked:
+              sys.exit(f"network-dependent packages leaked into the dev extra: {sorted(leaked)}")
+          print("dev extra is network-free")
+          PY
+
+  schemas:
+    # The contract documents, checked as a gate of their own rather than only inside the
+    # test suite — the consumer repositories validate their real emitted documents against
+    # these same files, so a schema that stops matching here breaks three repos.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -e '.[dev]'
+
+      - name: Every schema is a valid schema
+        run: |
+          python - <<'PY'
+          from jsonschema import Draft202012Validator
+          from lmpipeline.schema import SCHEMA_NAMES, load_schema
+          for name in SCHEMA_NAMES:
+              Draft202012Validator.check_schema(load_schema(name))
+              print(f"{name}.schema.json is a valid Draft 2020-12 schema")
+          PY
+
+      - name: The committed registry validates against its schema
+        run: |
+          python - <<'PY'
+          import yaml
+          from lmpipeline.registry import DEFAULT_REGISTRY_PATH
+          from lmpipeline.schema import MODEL_REGISTRY, validate_document
+          document = yaml.safe_load(DEFAULT_REGISTRY_PATH.read_text(encoding="utf-8"))
+          validate_document(MODEL_REGISTRY, document)
+          print(f"model-registry.yaml validates ({len(document['models'])} entries)")
+          PY
+
+  line-endings:
+    # The vendor drift gate hashes file bytes, so a CRLF checkout and an LF checkout
+    # disagree about a byte-identical tree. `.gitattributes` pins `* text=auto eol=lf` to
+    # prevent that; this asserts the pin is actually in effect rather than merely present.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No CRLF in tracked text files
+        run: |
+          python - <<'PY'
+          import subprocess, sys
+          tracked = subprocess.run(
+              ["git", "ls-files", "-z"], capture_output=True, check=True
+          ).stdout.split(b"\0")
+          offenders = []
+          for name in filter(None, tracked):
+              path = name.decode()
+              if path.endswith((".png", ".jpg", ".zip", ".gz", ".safetensors")):
+                  continue
+              try:
+                  data = open(path, "rb").read()
+              except OSError:
+                  continue
+              if b"\r\n" in data:
+                  offenders.append(path)
+          if offenders:
+              sys.exit("CRLF found in: " + ", ".join(offenders))
+          print(f"checked {len(list(filter(None, tracked)))} tracked files, all LF")
+          PY

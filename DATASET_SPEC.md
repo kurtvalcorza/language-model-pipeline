@@ -1,0 +1,122 @@
+# Dataset Contract
+
+Implemented by `lmpipeline.datasets`, shared verbatim by the validator and the finetuner.
+Both resolve and normalize through this one module, so they cannot disagree about what a
+dataset contains.
+
+## Transport
+
+A mounted directory or a single `.zip`. No other archive formats.
+
+One level of directory wrapping is unwrapped automatically — users routinely zip the folder
+rather than its contents. A zip containing another zip is rejected with a dedicated,
+actionable message (`DATASET_ARCHIVE_NESTED`); the Portal documents this as a common user
+error. Two or more archives is ambiguous and fails.
+
+## Resource bounds
+
+Ingestion is bounded **before** any row is parsed, because a dataset that is merely
+transport-valid can still be large enough to exhaust RAM. An OOM kill is the one failure the
+contract cannot report on: the Job dies without writing a result document, so the user sees
+an infrastructure error rather than a reason.
+
+| Bound | Value | Applies to | Override |
+|---|---|---|---|
+| `MAX_SPLIT_BYTES` | 512 MiB | each resolved split file | `LM_MAX_SPLIT_BYTES` |
+| `MAX_DATASET_BYTES` | 1 GiB | all splits together | `LM_MAX_DATASET_BYTES` |
+| `MAX_MEMBER_BYTES` | = `MAX_SPLIT_BYTES` | each archive member | follows |
+| `MAX_UNCOMPRESSED_BYTES` | = `MAX_DATASET_BYTES` | total archive expansion | follows |
+| `MAX_LINE_BYTES` | 4 MiB | one record | — |
+
+> **The two byte values are provisional (issue #11).** The agreed policy is to set them to
+> DIMER's documented maximum upload size, so this pipeline never rejects a dataset the
+> platform itself accepted. That quota has not been read out of the portal yet, and putting
+> an invented number in a shared contract is the failure mode COMPATIBILITY.md exists to
+> prevent. They are conservative in the meantime and overridable by environment variable, so
+> setting the real quota needs no code change.
+
+Two rules follow, and both are load-bearing:
+
+- **The byte bounds apply to mounted directories, not only archives.** Archive members carry
+  metadata that can be checked cheaply; a mounted directory carries none, and DIMER mounts
+  whatever the user uploaded. Bounding only the archive path leaves the directory path
+  completely open. Violations raise `DATASET_SPLIT_TOO_LARGE`.
+- **Consumers must not materialize a split unbounded.** `iter_examples` streams, but every
+  consumer needs the examples more than once, so each one reached for `list(...)` — which
+  restores the unbounded allocation the streaming reader exists to prevent, and defers the
+  example-count policy until after the allocation it was supposed to guard. Use
+  `load_examples(path, max_examples=...)`, which raises `DATASET_TOO_MANY_EXAMPLES` on the
+  example that would exceed the cap. Peak memory is then bounded by the cap, not by the file.
+
+Archive bounds are aligned to the split bounds deliberately: if a member limit were looser
+than the split limit, the pipeline would pay to extract bytes that split resolution then
+rejects.
+
+## Split resolution
+
+| Split | Filename | Required |
+|---|---|---|
+| train | `train.jsonl` | yes |
+| validation | `validation.jsonl` (alias `val.jsonl`) | no |
+| test | `test.jsonl` | no |
+
+If both `validation.jsonl` and `val.jsonl` are present the input is **ambiguous and fails**.
+Ambiguity is never resolved by preference order — a silent guess here would train on a
+different dataset than the user validated.
+
+A supplied validation split is used exactly as given. A supplied test split MUST actually be
+evaluated and reported. When validation is absent the trainer may derive one deterministically
+by stable hashing — reproducible, and not sensitive to input order.
+
+## Record schemas
+
+One family per file. A file that mixes families fails (`DATASET_SCHEMA_MIXED`) with the line
+number where the family changed.
+
+**Conversational** (preferred, canonical form)
+```json
+{"messages":[{"role":"system","content":"..."},{"role":"user","content":"..."},{"role":"assistant","content":"..."}]}
+```
+
+**Prompt / completion**
+```json
+{"prompt":"...","completion":"..."}
+```
+
+**Instruction**
+```json
+{"instruction":"...","input":"...","output":"..."}
+```
+
+All three normalize to canonical `messages`. Normalization is content-preserving, so the same
+content expressed in two families produces the same fingerprint — which is what makes
+cross-split leakage detection work when the user changes format between splits.
+
+## Rules
+
+- v1 roles are `system`, `user`, `assistant`. Tool/function-call training is deferred.
+- Every example needs at least one non-empty assistant target.
+- Valid UTF-8 required; Unicode is preserved exactly.
+- Every error carries a 1-based line number.
+- **No record is ever silently dropped, truncated, or mutated.** Blank lines are skipped
+  without shifting the line numbers of real records.
+- Per-line byte cap, and min/max example-count policy.
+
+## Tokenizer-aware checks
+
+Applied by the validator using the chat template of the resolved registry model at its pinned
+revision — which is why `model_key` must reach the validator (DEPLOYMENT.md §1).
+
+Token-length statistics (min/median/p95/p99/max) are computed and checked against the model's
+`max_sequence_length` ceiling. Overlength samples are **rejected, never silently truncated**.
+
+## Duplicates and leakage
+
+Fingerprints are computed over the canonical normalized form. Exact duplicates within a split
+are reported. **Exact train/validation or train/test overlap fails the run.** Training data is
+never silently deduplicated — that would change the dataset the user believes they trained on.
+
+## Privacy
+
+Result payloads carry aggregate statistics and line/index references only. Raw examples never
+appear in results or ordinary logs. See SECURITY.md.

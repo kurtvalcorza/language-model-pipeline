@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kurtvalcorza/language-model-pipeline/schemas/job.schema.json",
+  "title": "The resolved training job, as emitted by Job.to_dict()",
+  "description": "The complete, validated description of one training run, after the registry ceiling has narrowed the manifest envelope. This document is embedded in the training result's provenance, so it is what a later reader uses to reconstruct the run.",
+
+  "type": "object",
+  "properties": {
+    "schemaVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+
+    "model": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "The registry key selected via DIMER_PREPROCESSING_ARGS_JSON. This, not DIMER's Base Model field, is the authoritative runtime selector.",
+          "minLength": 1
+        },
+        "modelId": {"type": "string", "minLength": 1},
+        "revision": {
+          "type": "string",
+          "description": "An immutable commit SHA. Never a branch or tag — a job pinned to a moving ref is not reproducible.",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "backend": {"type": "string", "minLength": 1}
+      },
+      "required": ["key", "modelId", "revision", "backend"],
+      "additionalProperties": false
+    },
+
+    "training": {
+      "type": "object",
+      "properties": {
+        "method": {"type": "string", "enum": ["lora", "qlora"]},
+        "epochs": {"type": "integer", "minimum": 1},
+        "learningRate": {"type": "number", "exclusiveMinimum": 0},
+        "loraRank": {"type": "integer", "minimum": 1},
+        "loraAlpha": {"type": "integer", "minimum": 1},
+        "loraDropout": {"type": "number", "minimum": 0, "maximum": 1},
+        "perDeviceBatchSize": {"type": "integer", "minimum": 1},
+        "gradientAccumulationSteps": {"type": "integer", "minimum": 1},
+        "effectiveBatchSize": {
+          "type": "integer",
+          "description": "Derived, and recorded because it is the number that actually governs the optimizer step — reading it off the two factors is a step a later reader should not have to take.",
+          "minimum": 1
+        },
+        "seed": {"type": "integer", "minimum": 0},
+        "maxSequenceLength": {
+          "type": "integer",
+          "description": "Already clamped to the registry ceiling. The registry narrows the manifest envelope and never widens it.",
+          "minimum": 1
+        },
+        "validationSplit": {"type": "number", "minimum": 0, "exclusiveMaximum": 1}
+      },
+      "required": [
+        "method",
+        "epochs",
+        "learningRate",
+        "loraRank",
+        "loraAlpha",
+        "loraDropout",
+        "perDeviceBatchSize",
+        "gradientAccumulationSteps",
+        "effectiveBatchSize",
+        "seed",
+        "maxSequenceLength",
+        "validationSplit"
+      ],
+      "additionalProperties": false
+    },
+
+    "device": {"type": "string", "minLength": 1},
+    "runId": {"type": "string", "minLength": 1},
+    "sessionId": {"type": "string", "minLength": 1}
+  },
+
+  "required": ["schemaVersion", "model", "training", "device", "runId", "sessionId"],
+
+  "$comment": "datasetDir and outputDir are deliberately NOT part of this document, which is why additionalProperties is false rather than permissive. They are container-local mount points supplied by the platform, carry no meaning outside the Job, and this document is user-visible — paths are incidental infrastructure detail that should not leak into it.",
+  "additionalProperties": false
+}

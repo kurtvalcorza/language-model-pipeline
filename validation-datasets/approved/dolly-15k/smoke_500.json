@@ -1,0 +1,24 @@
+{
+  "approvedOn": "2026-08-22",
+  "conversionVersion": 1,
+  "datasetId": "dolly-15k",
+  "excludeLanguages": [],
+  "fingerprintCount": 500,
+  "fingerprintDigest": "7bcf6ae6f4464a09ed96d083ee68f8f2c92c671f279c5779c586f4be912abd20",
+  "packageSha256": null,
+  "pipelineUsage": "training",
+  "profile": "smoke_500",
+  "schemaVersion": "1.0",
+  "selectedSourceIndexCount": 500,
+  "selectedSourceIndexDigest": "41147a45c07a96ab781e0fbdcd10589fa1c59ee776bd340c7480443bb0d3ad29",
+  "sourceId": "databricks/databricks-dolly-15k",
+  "sourceRevision": "bdd27f4d94b9c1f951818a7da7fd7aeea5dbff1a",
+  "sourceSplit": "train",
+  "splits": {
+    "train": {
+      "exampleCount": 500,
+      "sha256": "da4ed7a858428c0e22782329a735b69cafee96a9e779f257ba6fe592f31f96db"
+    }
+  },
+  "toolVersion": "1.0"
+}

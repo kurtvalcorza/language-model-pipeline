@@ -206,6 +206,34 @@ def _iter_raw_lines(
         yield line_number, bytes(buffer)
 
 
+def load_examples(path: Path, *, max_examples: int) -> list[Example]:
+    """Materialize a split, refusing to grow past `max_examples`.
+
+    `iter_examples` streams, but every consumer needs the examples more than once — for
+    duplicate counting, for leakage comparison, for masking — so each of them wrapped it in
+    `list(...)`. That reintroduces exactly the unbounded allocation the streaming reader
+    exists to avoid: a file whose rows are individually legal can still be numerous enough
+    to exhaust RAM, and the example-count policy could not fire because it ran after the
+    list was already built.
+
+    Counting while filling makes the limit structural. The raise happens on the example
+    that would exceed the cap, so peak memory is bounded by the cap rather than by the
+    file, and the caller gets DATASET_TOO_MANY_EXAMPLES instead of an OOM kill.
+    """
+    examples: list[Example] = []
+    for example in iter_examples(path):
+        if len(examples) >= max_examples:
+            raise DatasetError(
+                f"{path.name} contains more than the {max_examples} examples this "
+                "pipeline accepts.",
+                code=Code.DATASET_TOO_MANY_EXAMPLES,
+                details={"file": path.name, "maximum": max_examples,
+                         "atLeast": max_examples + 1},
+            )
+        examples.append(example)
+    return examples
+
+
 def iter_examples(path: Path) -> Iterator[Example]:
     """Stream normalized examples from a JSONL file.
 

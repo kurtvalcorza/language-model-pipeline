@@ -76,6 +76,11 @@ class Code:
     CONFIG_SCHEMA_INVALID = "CONFIG_SCHEMA_INVALID"
     CONFIG_OUT_OF_BOUNDS = "CONFIG_OUT_OF_BOUNDS"
     CONFIG_METHOD_UNSUPPORTED = "CONFIG_METHOD_UNSUPPORTED"
+    # Mount topology, which is deployment configuration rather than user input. Both are
+    # raised at PREFLIGHT so the Job fails in seconds instead of after a multi-gigabyte
+    # download (cache) or after training has already completed (output).
+    CONFIG_CACHE_UNWRITABLE = "CONFIG_CACHE_UNWRITABLE"
+    CONFIG_OUTPUT_UNWRITABLE = "CONFIG_OUTPUT_UNWRITABLE"
 
     # -- resources / runtime ---------------------------------------------------
     RESOURCE_GPU_UNAVAILABLE = "RESOURCE_GPU_UNAVAILABLE"

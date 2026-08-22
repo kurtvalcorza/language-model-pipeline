@@ -248,6 +248,14 @@ models:
         # against granite's 0.538 on the same data is the tell. Same treatment as
         # qwen3-1.7b/lora and granite-4.1-3b/lora above: a spilled run is not a
         # measurement. Needs a larger GPU before this entry can be measured or promoted.
+        #
+        # Do NOT publish 10.59 here. The tier-2 (Tagalog) run at the SAME seq=1024 cap
+        # peaked at 10.59 GB and did not spill -- because that corpus is short and training
+        # pads dynamically, so actual batch length, not max_sequence_length, drove the
+        # activation and logits memory. Tier 1 reaches 943-token examples and spills; tier 2
+        # does not. An E2E run on real data therefore measures THAT DATASET, not a ceiling.
+        # Ceilings come only from measure_resource_profile.py, which pads to the full
+        # max_sequence_length precisely so the number holds for any dataset.
         min_vram_gb: null
         measured_on: null
 

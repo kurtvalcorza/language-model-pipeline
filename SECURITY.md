@@ -44,3 +44,61 @@ re-checked against bytes actually written, so a lying header cannot slip past.
 A model may not move to `approval_state: production` without an explicit license, security,
 and serving review. Anything requiring remote code stays disabled until separately reviewed
 and approved — adding one model is never a reason to weaken the loading policy.
+
+## Vulnerability policy
+
+`src/lmpipeline/data/vulnerability-policy.yaml` is the single authority for what counts as
+a release-blocking finding, and `lmpipeline.vulnpolicy` applies it. Both live in the shared
+package so the two deployable images cannot drift on that question — the same reason the
+model registry lives there.
+
+**Strictness tracks controllability.**
+
+| Scanner | Covers | Blocks on |
+|---|---|---|
+| `pip-audit` | the Python dependencies each image installs | any finding **with a fix available** |
+| Trivy | the built validator and finetuner images | **CRITICAL** with a fix available |
+
+We pin our own dependencies and can bump them, so a fixable finding there is actionable.
+Base-image OS packages come from an upstream image pinned for correctness — the CUDA/torch
+base is why sm_120 works at all — and cannot be patched from this repository.
+
+That split is measured, not assumed. On 2026-08-22 `python:3.12-slim` carried 194 findings:
+3 CRITICAL (none fixable), 50 HIGH (36 fixable), 141 lower. A "fail on any HIGH with a fix"
+rule would have blocked 36 Debian findings on day one, none actionable from here — which is
+how a scanner becomes noise everyone learns to ignore. "Fail on CRITICAL with a fix" blocks
+zero today and would still catch a real one.
+
+### Exceptions
+
+An exception is a decision with an owner and an end date, not a suppression. Every entry
+records **id, package, scope, owner, expires, and a rationale**, and the loader refuses a
+policy where any of those is missing or where `expires` is unparseable.
+
+The rationale must give the **mechanism** by which the code path is unreachable or
+mitigated here. "Not exploitable in practice" is not a rationale.
+
+**An expired exception blocks.** Renewal is a deliberate act carrying a fresh reachability
+argument; nothing lapses into permanence by being forgotten.
+
+Exceptions are scoped per image, because an argument about the finetuner says nothing about
+the validator, and match on aliases as well as ids — scanners disagree about whether a
+finding is `PYSEC-…`, `CVE-…` or `GHSA-…`.
+
+### Reading a finding
+
+Before excepting anything, establish reachability against this codebase rather than the
+advisory's worst case. The two live exceptions are worked examples: `CVE-2026-1839` targets
+`transformers.Trainer._load_rng_state()`, and this finetuner implements its own training
+loop and never instantiates `Trainer` — there is no `torch.load` call anywhere in
+`src/finetuner`. `CVE-2026-4372` is a genuine config-loading path, mitigated rather than
+unreachable, because configs are fetched only for registry-approved models at immutable
+40-hex revisions that users cannot override.
+
+State what a mitigation buys, and what it does not. Pinning means a user cannot redirect the
+Job to another revision and upstream cannot silently change the bytes we fetch — content
+addressing gives **immutability, not trustworthiness**. It does not establish that the
+pinned commit was benign when it was pinned. That residual supply-chain assumption about the
+publishers belongs *in* the exception, because it is the part that could stop being true:
+a publisher compromise, or a new entry from a less established source, is grounds to
+reassess the exception rather than renew it.

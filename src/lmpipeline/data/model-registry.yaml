@@ -44,8 +44,15 @@
 #   aisingapore/Gemma-SEA-LION-v3-9B-IT   Gemma2ForCausalLM   9.2B   license: gemma
 #   aisingapore/Llama-SEA-LION-v3-8B-IT   LlamaForCausalLM    8.0B   license: llama3.1
 #
-# 9.2B at 4-bit is ~4.6 GB of weights — granite-4.1-3b measured 4.69 GB peak under QLoRA, so
-# size is not the objection. Nor is `gemma` a multimodal exclusion: only the *specific*
+# On SIZE, a correction that was measured rather than reasoned. An earlier note here argued
+# 9.2B at 4-bit is ~4.6 GB of weights so size was not the objection. **That was wrong**, and
+# a real run said so: gemma-sea-lion-v3-9b under QLoRA peaked at 13.17 GB on an 11.94 GB card
+# (2026-08-22, tier 1, seq 1024) — it SPILLED to host RAM and ran at 0.065 examples/s against
+# granite-4.1-3b's 0.538 on identical data, an ~8x collapse that measures PCIe traffic. The
+# estimate counted quantized weights only and ignored activations, the bf16 adapter, optimizer
+# state, and Gemma's ~256k vocabulary, whose logits tensor dominates at these lengths.
+# So size IS an objection for this entry on this hardware; it may well fit DIMER's. Nor is
+# `gemma` a multimodal exclusion: only the *specific*
 # checkpoint google/gemma-3-4b-it is image-text-to-text. google/gemma-2-2b-it and
 # google/gemma-3-1b-it are Gemma2ForCausalLM / Gemma3ForCausalLM and admissible on
 # architecture; they are `gated: manual`, so they need accepted terms and a token.
@@ -234,6 +241,13 @@ models:
       # qlora only: 9.2B in bf16 is ~18.5 GB of weights alone, so LoRA cannot fit the
       # measurement GPU. Listing lora here would advertise a method that always fails.
       qlora:
+        # SPILLED on the measurement GPU, so there is no valid number to publish. Measured
+        # 2026-08-22: 13.17 GB peak against 11.94 GB available, i.e. the driver satisfied
+        # ~1.2 GB from host RAM over PCIe. The run reported success and produced a correct
+        # artifact -- spilling degrades speed, not correctness -- but 0.065 examples/s
+        # against granite's 0.538 on the same data is the tell. Same treatment as
+        # qwen3-1.7b/lora and granite-4.1-3b/lora above: a spilled run is not a
+        # measurement. Needs a larger GPU before this entry can be measured or promoted.
         min_vram_gb: null
         measured_on: null
 

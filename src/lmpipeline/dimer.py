@@ -159,6 +159,42 @@ def _normalize_device(value: str) -> str:
     return value
 
 
+def notify_done_callback_url(url: str | None, *, timeout: float = 10.0) -> bool:
+    """POST to a callback URL that may not have come from a constructed DimerEnv.
+
+    Exists because the entrypoints must call back even when `DimerEnv.from_environ()` is
+    what failed: a malformed DIMER_PREPROCESSING_ARGS_JSON left `env` unbound, the result
+    document was written through the os.environ fallback, and the callback was skipped --
+    so the Workbench sat at "Validating..." until the sweeper marked the run OVERDUE.
+    DIMER's own docs name a missing callback as the cause of exactly that symptom.
+
+    Takes the raw URL rather than an env so the one code path that cannot rely on parsing
+    still has a way to signal completion.
+
+    Never raises and never logs the URL: it is a signed token.
+    """
+    if not url:
+        return False
+
+    # urllib registers file:// and ftp:// handlers by default, so an unexpected scheme
+    # would be followed silently. The shipped Mitra validator guards this the same way.
+    if urlparse(url).scheme not in ALLOWED_CALLBACK_SCHEMES:
+        return False
+
+    try:
+        import urllib.request
+
+        # Empty body, and deliberately NO Content-Type: declaring application/json with a
+        # zero-length body is invalid JSON and a body-parsing endpoint may reject it.
+        request = urllib.request.Request(url, data=b"", method="POST")
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return 200 <= response.status < 300
+    except Exception:
+        # Swallow deliberately: a failed callback must not mask the real result, and the
+        # exception text can embed the signed URL.
+        return False
+
+
 def notify_done_callback(env: DimerEnv, *, timeout: float = 10.0) -> bool:
     """POST to DIMER_DONE_CALLBACK. Returns True when the platform acknowledged.
 
@@ -168,23 +204,4 @@ def notify_done_callback(env: DimerEnv, *, timeout: float = 10.0) -> bool:
 
     Never raises and never logs the URL: it is a signed token.
     """
-    if not env.done_callback:
-        return False
-
-    # urllib registers file:// and ftp:// handlers by default, so an unexpected scheme
-    # would be followed silently. The shipped Mitra validator guards this the same way.
-    if urlparse(env.done_callback).scheme not in ALLOWED_CALLBACK_SCHEMES:
-        return False
-
-    try:
-        import urllib.request
-
-        # Empty body, and deliberately NO Content-Type: declaring application/json with a
-        # zero-length body is invalid JSON and a body-parsing endpoint may reject it.
-        request = urllib.request.Request(env.done_callback, data=b"", method="POST")
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return 200 <= response.status < 300
-    except Exception:
-        # Swallow deliberately: a failed callback must not mask the real result, and the
-        # exception text can embed the signed URL.
-        return False
+    return notify_done_callback_url(env.done_callback, timeout=timeout)

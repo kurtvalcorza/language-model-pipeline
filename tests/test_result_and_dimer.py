@@ -4,7 +4,12 @@ import json
 
 import pytest
 
-from lmpipeline.dimer import REDACTED, DimerEnv, _normalize_device
+from lmpipeline.dimer import (
+    REDACTED,
+    DimerEnv,
+    _normalize_device,
+    notify_done_callback_url,
+)
 from lmpipeline.errors import Code, ConfigError, DatasetError, Stage
 from lmpipeline.result import Result, write_result
 
@@ -135,3 +140,51 @@ def test_result_is_written_atomically(tmp_path):
     assert json.loads(target.read_text(encoding="utf-8"))["successful"] is True
     # No partial temp files left behind.
     assert [p.name for p in target.parent.iterdir()] == ["result.json"]
+
+# -- the callback must fire even when env construction failed ---------------------
+#
+# DIMER names a missing done-callback as the cause of a Workbench session stuck at
+# "Validating...". The entrypoints promised "always POST" from `finally` but guarded the
+# call with `if env is not None`, so the one failure that leaves env unbound -- a malformed
+# DIMER_*_JSON -- was exactly the failure that skipped the callback.
+
+
+def test_the_url_callback_posts_without_a_constructed_env(monkeypatch):
+    posted = []
+
+    class _Response:
+        status = 204
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    import urllib.request
+
+    def fake_urlopen(request, timeout=None):
+        posted.append((request.full_url, request.get_method(), request.data))
+        return _Response()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert notify_done_callback_url("https://backend/done?sig=abc") is True
+    assert posted == [("https://backend/done?sig=abc", "POST", b"")]
+
+
+def test_the_url_callback_refuses_non_http_schemes():
+    """urllib registers file:// and ftp:// handlers, so an odd scheme would be followed."""
+    assert notify_done_callback_url("file:///etc/passwd") is False
+    assert notify_done_callback_url("ftp://host/x") is False
+
+
+def test_the_url_callback_is_a_no_op_without_a_url():
+    assert notify_done_callback_url(None) is False
+    assert notify_done_callback_url("") is False
+
+
+def test_the_url_callback_never_raises(monkeypatch):
+    """A failed callback must not mask the real result, and must not leak the signed URL."""
+    import urllib.request
+
+    def boom(request, timeout=None):
+        raise OSError("connection refused to https://backend/done?sig=secret")
+
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    assert notify_done_callback_url("https://backend/done?sig=secret") is False

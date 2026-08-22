@@ -36,6 +36,19 @@ class PolicyError(RuntimeError):
     """The policy file itself is unusable. Never treated as 'no findings'."""
 
 
+class ScanError(RuntimeError):
+    """Scanner output is missing, truncated or not a scan result at all.
+
+    Distinct from "the scan found nothing", and that distinction is the entire point. An
+    empty document is what a CRASHED scanner leaves behind, and treating it as zero
+    findings turns a broken gate into a green one -- the same defect as a cross-repo check
+    that reports success when its credential is absent.
+
+    Found the hard way: a probe that swallowed stderr reported `raw: {}` and PASS for a
+    base image that in fact carries 21 blocking findings.
+    """
+
+
 @dataclass(frozen=True)
 class Finding:
     source: str          # "pip-audit" | "trivy"
@@ -94,8 +107,26 @@ def load_policy(path: Path | str | None = None) -> dict[str, Any]:
 
 
 def parse_pip_audit(document: dict[str, Any]) -> list[Finding]:
+    """Parse pip-audit JSON, refusing anything that is not a completed audit.
+
+    Same reasoning as parse_trivy: `dependencies: []` is a real audit of nothing, but a
+    document with no `dependencies` key at all is a failed run, and must not read as clean.
+    """
+    if not isinstance(document, dict) or "dependencies" not in document:
+        raise ScanError(
+            "pip-audit output is not a completed audit document: no dependencies field. "
+            "This is missing or failed scanner output, not a clean result."
+        )
+
+    dependencies = document.get("dependencies")
+    if not isinstance(dependencies, list):
+        raise ScanError(
+            f"pip-audit output has a malformed dependencies field of type "
+            f"{type(dependencies).__name__}; expected a list."
+        )
+
     findings: list[Finding] = []
-    for dep in document.get("dependencies") or []:
+    for dep in dependencies:
         for vuln in dep.get("vulns") or []:
             fixes = vuln.get("fix_versions") or []
             findings.append(Finding(
@@ -110,8 +141,37 @@ def parse_pip_audit(document: dict[str, Any]) -> list[Finding]:
 
 
 def parse_trivy(document: dict[str, Any]) -> list[Finding]:
+    """Parse Trivy JSON, refusing anything that is not a completed scan.
+
+    The invariant is NOT "Results must be non-empty" -- a genuinely clean image legitimately
+    yields no findings, and rejecting that would make the gate lie in the other direction.
+    It is that a completed Trivy document must be *distinguishable* from missing or failed
+    scanner output.
+
+    `SchemaVersion` is the marker: Trivy emits it on every successful run, and no partial
+    write or crash artefact carries it. So `{"SchemaVersion": 2, "Results": []}` is a clean
+    scan and passes, while `{}` -- what a crashed scanner leaves -- is refused.
+    """
+    if not isinstance(document, dict) or "SchemaVersion" not in document:
+        raise ScanError(
+            "Trivy output is not a completed scan document: no SchemaVersion field. "
+            "This is missing or failed scanner output, not a clean result. Check the "
+            "scanner's exit code and stderr rather than treating this as zero findings."
+        )
+
+    results = document.get("Results")
+    if results is None:
+        # Trivy omits Results when an image has nothing it can analyse. That is a real,
+        # completed scan of a genuinely empty target, so it is zero findings, not an error.
+        results = []
+    if not isinstance(results, list):
+        raise ScanError(
+            f"Trivy output has a malformed Results field of type {type(results).__name__}; "
+            "expected a list. Refusing to interpret it as zero findings."
+        )
+
     findings: list[Finding] = []
-    for result in document.get("Results") or []:
+    for result in results:
         for vuln in result.get("Vulnerabilities") or []:
             findings.append(Finding(
                 source="trivy",

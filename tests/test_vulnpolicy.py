@@ -19,10 +19,11 @@ import datetime as dt
 import pytest
 import yaml
 
-from lmpipeline.vulnpolicy import (
+from lmpipeline.vulnpolicy import (  # noqa: I001
     POLICY_PATH,
     Finding,
     PolicyError,
+    ScanError,
     evaluate,
     load_policy,
     parse_pip_audit,
@@ -205,7 +206,7 @@ def test_pip_audit_output_is_parsed():
 
 
 def test_trivy_output_is_parsed():
-    doc = {"Results": [{"Vulnerabilities": [
+    doc = {"SchemaVersion": 2, "Results": [{"Vulnerabilities": [
         {"VulnerabilityID": "CVE-1", "PkgName": "libssl", "InstalledVersion": "1.0",
          "Severity": "CRITICAL", "FixedVersion": "1.1"},
         {"VulnerabilityID": "CVE-2", "PkgName": "zlib", "InstalledVersion": "1.0",
@@ -216,9 +217,17 @@ def test_trivy_output_is_parsed():
     assert findings[1].fix is None
 
 
-def test_empty_scanner_output_is_not_a_crash():
-    assert parse_pip_audit({}) == []
-    assert parse_trivy({}) == []
+def test_empty_scanner_output_is_now_refused_rather_than_read_as_clean():
+    """This test previously asserted the DEFECT.
+
+    It required `parse_*({}) == []`, i.e. that a crashed scanner's empty output be read as
+    zero findings -- which is precisely how a broken gate turns green. The behaviour is
+    deliberately reversed: an incomplete document is now a ScanError.
+    """
+    with pytest.raises(ScanError):
+        parse_pip_audit({})
+    with pytest.raises(ScanError):
+        parse_trivy({})
 
 
 def test_render_names_the_blocking_findings():
@@ -269,3 +278,67 @@ def test_the_policy_file_ships_inside_the_package():
     """It must reach the containers, which vendor the package rather than the repo."""
     assert POLICY_PATH.is_file()
     assert POLICY_PATH.parent.name == "data"
+
+
+# -- scan ingestion must fail closed ------------------------------------------------
+#
+# An empty document is what a CRASHED scanner leaves behind. Reading it as zero findings
+# turns a broken gate into a green one -- the same defect as a cross-repo check reporting
+# success when its credential is absent.
+#
+# Found by falling into it: a probe that swallowed stderr reported `raw: {}` and PASS for a
+# base image that in fact carries 21 blocking findings.
+#
+# The invariant is NOT "Results must be non-empty". A genuinely clean image legitimately has
+# none, and rejecting that would make the gate lie in the other direction. It is that a
+# COMPLETED document must be distinguishable from missing output.
+
+
+def test_a_clean_trivy_scan_is_accepted():
+    """{"SchemaVersion": 2, "Results": []} is a real scan of a clean image."""
+    assert parse_trivy({"SchemaVersion": 2, "Results": []}) == []
+
+
+def test_trivy_omitting_results_entirely_is_still_a_clean_scan():
+    """Trivy omits Results when the target has nothing analysable. Completed, not failed."""
+    assert parse_trivy({"SchemaVersion": 2, "ArtifactName": "scratch"}) == []
+
+
+def test_an_empty_trivy_document_is_refused():
+    """The regression: `{}` used to parse as zero findings and pass the gate."""
+    with pytest.raises(ScanError, match="SchemaVersion"):
+        parse_trivy({})
+
+
+def test_malformed_trivy_results_are_refused():
+    with pytest.raises(ScanError, match="malformed"):
+        parse_trivy({"SchemaVersion": 2, "Results": "not a list"})
+
+
+def test_non_dict_trivy_output_is_refused():
+    with pytest.raises(ScanError):
+        parse_trivy([])
+
+
+def test_a_clean_pip_audit_is_accepted():
+    assert parse_pip_audit({"dependencies": []}) == []
+
+
+def test_an_empty_pip_audit_document_is_refused():
+    with pytest.raises(ScanError, match="dependencies"):
+        parse_pip_audit({})
+
+
+def test_malformed_pip_audit_dependencies_are_refused():
+    with pytest.raises(ScanError, match="malformed"):
+        parse_pip_audit({"dependencies": {}})
+
+
+def test_the_real_failure_this_prevents():
+    """End to end: a crashed scanner must not be able to produce a passing gate.
+
+    Before this change the sequence below returned an empty finding list, which evaluate()
+    scored as ok -- a green gate over an image nobody had scanned.
+    """
+    with pytest.raises(ScanError):
+        evaluate(parse_trivy({}), policy=_policy(), scope="finetuner", today=TODAY)

@@ -31,6 +31,20 @@ POLICY_PATH = Path(__file__).resolve().parent / "data" / "vulnerability-policy.y
 
 REQUIRED_EXCEPTION_FIELDS = ("id", "package", "rationale", "owner", "expires", "scope")
 
+KNOWN_SOURCES = ("pip-audit", "trivy")
+
+# A `match: package` exception is broader than an id match, so it carries a heavier
+# structural burden: it must also name the scanner whose output it applies to and the exact
+# installed version the reachability argument was measured against.
+#
+# Those two fields are what stop it becoming a floating suppression. A reachability argument
+# is evidence about a specific artefact -- "linux-libc-dev 5.15.0-151.161 as Trivy sees it in
+# this base image" -- not a standing judgement about a package name. Binding the exception to
+# source + package + installed version means a base refresh that ships another version stops
+# matching AUTOMATICALLY and blocks, forcing reassessment, rather than silently inheriting a
+# rationale that was never measured against it.
+PACKAGE_MATCH_REQUIRED_FIELDS = ("source", "installed")
+
 
 class PolicyError(RuntimeError):
     """The policy file itself is unusable. Never treated as 'no findings'."""
@@ -101,6 +115,23 @@ def load_policy(path: Path | str | None = None) -> dict[str, Any]:
             raise PolicyError(
                 f"Exception {entry['id']!r} has match={mode!r}; expected 'id' or 'package'."
             )
+
+        if mode == "package":
+            missing = [f for f in PACKAGE_MATCH_REQUIRED_FIELDS if not entry.get(f)]
+            if missing:
+                raise PolicyError(
+                    f"Package-level exception {entry['id']!r} is missing "
+                    f"{', '.join(missing)}. A package match must bind to the scanner source "
+                    "and the exact installed version it was argued against, so a future "
+                    "base image carrying another version blocks instead of inheriting it."
+                )
+            source = str(entry["source"])
+            if source not in KNOWN_SOURCES:
+                raise PolicyError(
+                    f"Package-level exception {entry['id']!r} names source {source!r}, "
+                    f"which no scanner emits; expected one of {', '.join(KNOWN_SOURCES)}. "
+                    "It could never match a finding and would be an inert no-op."
+                )
 
         try:
             _dt.date.fromisoformat(str(entry["expires"]))
@@ -199,12 +230,19 @@ def _matching_exception(
 
       match: id       (default) -- this advisory, by id or alias. Use when the argument is
                       about a specific vulnerability.
-      match: package  -- every finding in one package. Use ONLY when the reachability
-                      argument is about the package rather than any individual CVE, e.g.
-                      "nothing in this image can consume these files at all". It
-                      deliberately also covers advisories not yet published, which is
-                      exactly what makes it broader and why it must be stated explicitly,
-                      scoped to one image, and bounded by an expiry.
+      match: package  -- every finding in one package, AS SEEN BY ONE SCANNER AT ONE
+                      INSTALLED VERSION. Use ONLY when the reachability argument is about
+                      the package rather than any individual CVE, e.g. "nothing in this
+                      image can consume these files at all". It deliberately also covers
+                      advisories not yet published, which is exactly what makes it broader
+                      and why it must be stated explicitly, bound to source + package +
+                      installed version, confined to a scope, and bounded by an expiry.
+
+    That structural binding is the difference between a scoped exception and a floating
+    suppression. Every dimension of it is a dimension the evidence was actually measured on,
+    so a base refresh shipping another version of the same package -- or the same package
+    surfacing from a different scanner, whose findings the argument never covered -- stops
+    matching and blocks, rather than inheriting a rationale nobody re-checked.
     """
     for entry in policy.get("exceptions") or []:
         if scope not in (entry.get("scope") or []):
@@ -212,7 +250,11 @@ def _matching_exception(
 
         mode = str(entry.get("match", "id"))
         if mode == "package":
-            if finding.package == str(entry["package"]):
+            if (
+                finding.source == str(entry["source"])
+                and finding.package == str(entry["package"])
+                and finding.installed == str(entry["installed"])
+            ):
                 return entry
             continue
 

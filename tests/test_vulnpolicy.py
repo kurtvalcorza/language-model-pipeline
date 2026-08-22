@@ -354,18 +354,31 @@ def test_the_real_failure_this_prevents():
 # The need was found by testing against a real scan: a package-shaped exception written
 # without this mode matched nothing and would have merged as an inert no-op that looked
 # like a fix.
+#
+# Breadth over CVEs is the point; breadth over ARTEFACTS is a bug. A reachability argument
+# is evidence about one measured thing -- this package, at this version, as this scanner
+# sees it -- so the match binds to source + package + installed version + scope, inside the
+# expiry. The tests below prove each of those five actually excludes, because an exception
+# that quietly stopped excluding would look exactly like one that works.
 
 
-def _pkg_exception(match="package", scope=("finetuner",), expires="2099-01-01"):
-    return _policy(exceptions=[{
+def _pkg_exception(match="package", scope=("finetuner",), expires="2099-01-01",
+                   source="trivy", installed="5.15.0-151.161"):
+    entry = {
         "id": "linux-libc-dev-kernel-headers", "package": "linux-libc-dev",
         "match": match, "scope": list(scope), "owner": "kurtvalcorza",
         "expires": expires, "rationale": "no compiler in the image can consume headers",
-    }])
+    }
+    if source is not None:
+        entry["source"] = source
+    if installed is not None:
+        entry["installed"] = installed
+    return _policy(exceptions=[entry])
 
 
-def _kernel_finding(identifier="CVE-2025-38724"):
-    return Finding("trivy", identifier, "linux-libc-dev", "5.15.0-151.161",
+def _kernel_finding(identifier="CVE-2025-38724", installed="5.15.0-151.161",
+                    source="trivy"):
+    return Finding(source, identifier, "linux-libc-dev", installed,
                    "CRITICAL", "5.15.0-185.195")
 
 
@@ -387,6 +400,67 @@ def test_a_package_exception_does_not_cover_other_packages():
     other = Finding("trivy", "CVE-1", "openssl", "1.0", "CRITICAL", "1.1")
     decision = evaluate([other], policy=_pkg_exception(), scope="finetuner", today=TODAY)
     assert not decision.ok
+
+
+def test_a_package_exception_does_not_cover_another_version_of_the_same_package():
+    """The base-refresh case, and the reason the binding exists.
+
+    The evidence is about linux-libc-dev 5.15.0-151.161 specifically. A base refresh to
+    2.11.0 ships 6.8.0-106.106 -- a NEWER VULNERABLE VERSION of the same package, measured
+    at 19 fixable CRITICAL findings. Nobody re-argued reachability for it, so it must block
+    on its own rather than inherit an exception written for a different artefact.
+    """
+    upgraded = _kernel_finding("CVE-2026-9001", installed="6.8.0-106.106")
+    decision = evaluate([upgraded], policy=_pkg_exception(), scope="finetuner", today=TODAY)
+    assert not decision.ok
+    assert len(decision.blocking) == 1 and not decision.excepted
+
+
+def test_a_package_exception_does_not_cover_another_scanner_source():
+    """A Trivy image argument says nothing about a pip-audit dependency finding.
+
+    Same package name, same version, different scanner -- and a different question. The
+    image argument is "nothing in this image can consume these headers"; it is not evidence
+    about a Python dependency we pin ourselves and could simply bump.
+    """
+    from_pip = _kernel_finding("PYSEC-9999", source="pip-audit")
+    decision = evaluate([from_pip], policy=_pkg_exception(), scope="finetuner", today=TODAY)
+    assert not decision.ok
+    assert len(decision.blocking) == 1 and not decision.excepted
+
+
+def test_a_package_exception_without_a_source_is_rejected(tmp_path):
+    """Refused at load, not silently ignored: an unbound package match is the whole risk."""
+    path = tmp_path / "policy.yaml"
+    path.write_text(yaml.safe_dump(_pkg_exception(source=None)), encoding="utf-8")
+    with pytest.raises(PolicyError, match="source"):
+        load_policy(path)
+
+
+def test_a_package_exception_without_an_installed_version_is_rejected(tmp_path):
+    path = tmp_path / "policy.yaml"
+    path.write_text(yaml.safe_dump(_pkg_exception(installed=None)), encoding="utf-8")
+    with pytest.raises(PolicyError, match="installed"):
+        load_policy(path)
+
+
+def test_a_package_exception_naming_a_scanner_that_does_not_exist_is_rejected(tmp_path):
+    """An unmatched source makes the entry inert -- exactly the no-op this mode was born of."""
+    path = tmp_path / "policy.yaml"
+    path.write_text(yaml.safe_dump(_pkg_exception(source="grype")), encoding="utf-8")
+    with pytest.raises(PolicyError, match="grype"):
+        load_policy(path)
+
+
+def test_id_matching_does_not_require_the_package_binding(tmp_path):
+    """The extra burden lands on the broad mode only; id matches are unchanged."""
+    doc = _policy(exceptions=[{
+        "id": "PYSEC-2026-2288", "package": "transformers", "scope": ["finetuner"],
+        "owner": "k", "expires": "2099-01-01", "rationale": "no Trainer in this repo",
+    }])
+    path = tmp_path / "policy.yaml"
+    path.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    assert load_policy(path)["exceptions"][0]["id"] == "PYSEC-2026-2288"
 
 
 def test_a_package_exception_still_respects_scope():
@@ -432,5 +506,10 @@ def test_the_committed_kernel_header_exception_is_package_scoped_to_the_finetune
     assert entry["match"] == "package"
     assert entry["scope"] == ["finetuner"]
     assert entry["expires"] == "2026-11-22"
+    # Bound to the artefact the rationale was measured on. Verified 2026-08-22 against the
+    # real scan of the pinned base: all 4,550 linux-libc-dev findings, the 21 blocking ones
+    # included, report exactly this version.
+    assert entry["source"] == "trivy"
+    assert entry["installed"] == "5.15.0-151.161"
     for expected in ("no cc, gcc or nvcc", "REASSESS", "seven packages"):
         assert expected in entry["rationale"]

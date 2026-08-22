@@ -240,3 +240,66 @@ def test_every_problem_is_reported_not_only_the_first():
         validate_document(VALIDATION_RESULT, document)
     message = str(exc.value)
     assert "classNames" in message and "taskType" in message
+
+
+# -- blocked_reason / gated ------------------------------------------------------
+#
+# These encode policy state, so they are enforced structurally rather than by convention.
+# Each is shown REFUSING, because a rule that has only ever passed is indistinguishable from
+# one that is never evaluated.
+
+
+def test_a_blocked_entry_must_say_why():
+    """`blocked` alone forces every reader to reconstruct the reason from prose or history."""
+    doc = _registry_doc()
+    del doc["models"]["phi-4-mini-instruct"]["blocked_reason"]
+    with pytest.raises(SchemaError) as exc:
+        validate_document(MODEL_REGISTRY, doc)
+    assert "blocked_reason" in str(exc.value)
+
+
+def test_blocked_reason_is_a_closed_vocabulary():
+    """Free text cannot be filtered, compared, or acted on by CI."""
+    doc = _registry_doc()
+    doc["models"]["phi-4-mini-instruct"]["blocked_reason"] = "needs more thought"
+    with pytest.raises(SchemaError):
+        validate_document(MODEL_REGISTRY, doc)
+
+
+def test_a_credential_blocked_model_may_not_be_user_facing():
+    """The invariant that keeps llama-3.2-3b-instruct out of the Workbench enum.
+
+    Offering a model whose credentials DIMER cannot yet deliver would fail at run time, and
+    would also break the finetuner's manifest/registry agreement test.
+    """
+    doc = _registry_doc()
+    doc["models"]["llama-3.2-3b-instruct"]["internal_only"] = False
+    with pytest.raises(SchemaError) as exc:
+        validate_document(MODEL_REGISTRY, doc)
+    assert "internal_only" in str(exc.value)
+
+
+def test_gated_mirrors_the_hub_vocabulary_not_a_boolean():
+    """`auto` and `manual` differ operationally; collapsing them loses that distinction."""
+    doc = _registry_doc()
+    doc["models"]["llama-3.2-3b-instruct"]["gated"] = True
+    with pytest.raises(SchemaError):
+        validate_document(MODEL_REGISTRY, doc)
+
+    for value in (False, "auto", "manual"):
+        doc["models"]["llama-3.2-3b-instruct"]["gated"] = value
+        validate_document(MODEL_REGISTRY, doc)
+
+
+def test_a_gated_model_is_not_baked_into_the_validator_image():
+    """The reason the entry is disabled rather than merely blocked.
+
+    fetch_tokenizers.py bakes one tokenizer per ENABLED key and fails the build if any cannot
+    be fetched. A gated key in that set would make every validator image build require an HF
+    credential, which DEPLOYMENT.md §4 says DIMER builds do not have.
+    """
+    from lmpipeline.registry import ModelRegistry
+
+    registry = ModelRegistry.load()
+    assert "llama-3.2-3b-instruct" not in registry.keys()
+    assert "llama-3.2-3b-instruct" not in registry.keys(user_facing=True)

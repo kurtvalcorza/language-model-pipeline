@@ -31,9 +31,36 @@ POLICY_PATH = Path(__file__).resolve().parent / "data" / "vulnerability-policy.y
 
 REQUIRED_EXCEPTION_FIELDS = ("id", "package", "rationale", "owner", "expires", "scope")
 
+KNOWN_SOURCES = ("pip-audit", "trivy")
+
+# A `match: package` exception is broader than an id match, so it carries a heavier
+# structural burden: it must also name the scanner whose output it applies to and the exact
+# installed version the reachability argument was measured against.
+#
+# Those two fields are what stop it becoming a floating suppression. A reachability argument
+# is evidence about a specific artefact -- "linux-libc-dev 5.15.0-151.161 as Trivy sees it in
+# this base image" -- not a standing judgement about a package name. Binding the exception to
+# source + package + installed version means a base refresh that ships another version stops
+# matching AUTOMATICALLY and blocks, forcing reassessment, rather than silently inheriting a
+# rationale that was never measured against it.
+PACKAGE_MATCH_REQUIRED_FIELDS = ("source", "installed")
+
 
 class PolicyError(RuntimeError):
     """The policy file itself is unusable. Never treated as 'no findings'."""
+
+
+class ScanError(RuntimeError):
+    """Scanner output is missing, truncated or not a scan result at all.
+
+    Distinct from "the scan found nothing", and that distinction is the entire point. An
+    empty document is what a CRASHED scanner leaves behind, and treating it as zero
+    findings turns a broken gate into a green one -- the same defect as a cross-repo check
+    that reports success when its credential is absent.
+
+    Found the hard way: a probe that swallowed stderr reported `raw: {}` and PASS for a
+    base image that in fact carries 21 blocking findings.
+    """
 
 
 @dataclass(frozen=True)
@@ -83,6 +110,29 @@ def load_policy(path: Path | str | None = None) -> dict[str, Any]:
                 f"Exception {entry.get('id', '<no id>')!r} is missing {', '.join(missing)}. "
                 "Every exception must record what, why, who, until when, and where."
             )
+        mode = str(entry.get("match", "id"))
+        if mode not in ("id", "package"):
+            raise PolicyError(
+                f"Exception {entry['id']!r} has match={mode!r}; expected 'id' or 'package'."
+            )
+
+        if mode == "package":
+            missing = [f for f in PACKAGE_MATCH_REQUIRED_FIELDS if not entry.get(f)]
+            if missing:
+                raise PolicyError(
+                    f"Package-level exception {entry['id']!r} is missing "
+                    f"{', '.join(missing)}. A package match must bind to the scanner source "
+                    "and the exact installed version it was argued against, so a future "
+                    "base image carrying another version blocks instead of inheriting it."
+                )
+            source = str(entry["source"])
+            if source not in KNOWN_SOURCES:
+                raise PolicyError(
+                    f"Package-level exception {entry['id']!r} names source {source!r}, "
+                    f"which no scanner emits; expected one of {', '.join(KNOWN_SOURCES)}. "
+                    "It could never match a finding and would be an inert no-op."
+                )
+
         try:
             _dt.date.fromisoformat(str(entry["expires"]))
         except ValueError as exc:
@@ -94,8 +144,26 @@ def load_policy(path: Path | str | None = None) -> dict[str, Any]:
 
 
 def parse_pip_audit(document: dict[str, Any]) -> list[Finding]:
+    """Parse pip-audit JSON, refusing anything that is not a completed audit.
+
+    Same reasoning as parse_trivy: `dependencies: []` is a real audit of nothing, but a
+    document with no `dependencies` key at all is a failed run, and must not read as clean.
+    """
+    if not isinstance(document, dict) or "dependencies" not in document:
+        raise ScanError(
+            "pip-audit output is not a completed audit document: no dependencies field. "
+            "This is missing or failed scanner output, not a clean result."
+        )
+
+    dependencies = document.get("dependencies")
+    if not isinstance(dependencies, list):
+        raise ScanError(
+            f"pip-audit output has a malformed dependencies field of type "
+            f"{type(dependencies).__name__}; expected a list."
+        )
+
     findings: list[Finding] = []
-    for dep in document.get("dependencies") or []:
+    for dep in dependencies:
         for vuln in dep.get("vulns") or []:
             fixes = vuln.get("fix_versions") or []
             findings.append(Finding(
@@ -110,8 +178,37 @@ def parse_pip_audit(document: dict[str, Any]) -> list[Finding]:
 
 
 def parse_trivy(document: dict[str, Any]) -> list[Finding]:
+    """Parse Trivy JSON, refusing anything that is not a completed scan.
+
+    The invariant is NOT "Results must be non-empty" -- a genuinely clean image legitimately
+    yields no findings, and rejecting that would make the gate lie in the other direction.
+    It is that a completed Trivy document must be *distinguishable* from missing or failed
+    scanner output.
+
+    `SchemaVersion` is the marker: Trivy emits it on every successful run, and no partial
+    write or crash artefact carries it. So `{"SchemaVersion": 2, "Results": []}` is a clean
+    scan and passes, while `{}` -- what a crashed scanner leaves -- is refused.
+    """
+    if not isinstance(document, dict) or "SchemaVersion" not in document:
+        raise ScanError(
+            "Trivy output is not a completed scan document: no SchemaVersion field. "
+            "This is missing or failed scanner output, not a clean result. Check the "
+            "scanner's exit code and stderr rather than treating this as zero findings."
+        )
+
+    results = document.get("Results")
+    if results is None:
+        # Trivy omits Results when an image has nothing it can analyse. That is a real,
+        # completed scan of a genuinely empty target, so it is zero findings, not an error.
+        results = []
+    if not isinstance(results, list):
+        raise ScanError(
+            f"Trivy output has a malformed Results field of type {type(results).__name__}; "
+            "expected a list. Refusing to interpret it as zero findings."
+        )
+
     findings: list[Finding] = []
-    for result in document.get("Results") or []:
+    for result in results:
         for vuln in result.get("Vulnerabilities") or []:
             findings.append(Finding(
                 source="trivy",
@@ -127,13 +224,43 @@ def parse_trivy(document: dict[str, Any]) -> list[Finding]:
 def _matching_exception(
     finding: Finding, policy: dict[str, Any], *, scope: str
 ) -> dict[str, Any] | None:
+    """Find the exception covering this finding, if any.
+
+    Two match modes, and the broader one is OPT-IN so it can never be reached by accident:
+
+      match: id       (default) -- this advisory, by id or alias. Use when the argument is
+                      about a specific vulnerability.
+      match: package  -- every finding in one package, AS SEEN BY ONE SCANNER AT ONE
+                      INSTALLED VERSION. Use ONLY when the reachability argument is about
+                      the package rather than any individual CVE, e.g. "nothing in this
+                      image can consume these files at all". It deliberately also covers
+                      advisories not yet published, which is exactly what makes it broader
+                      and why it must be stated explicitly, bound to source + package +
+                      installed version, confined to a scope, and bounded by an expiry.
+
+    That structural binding is the difference between a scoped exception and a floating
+    suppression. Every dimension of it is a dimension the evidence was actually measured on,
+    so a base refresh shipping another version of the same package -- or the same package
+    surfacing from a different scanner, whose findings the argument never covered -- stops
+    matching and blocks, rather than inheriting a rationale nobody re-checked.
+    """
     for entry in policy.get("exceptions") or []:
-        identifiers = {str(entry["id"])} | {str(a) for a in (entry.get("aliases") or [])}
-        if finding.identifier not in identifiers:
-            continue
         if scope not in (entry.get("scope") or []):
             continue
-        return entry
+
+        mode = str(entry.get("match", "id"))
+        if mode == "package":
+            if (
+                finding.source == str(entry["source"])
+                and finding.package == str(entry["package"])
+                and finding.installed == str(entry["installed"])
+            ):
+                return entry
+            continue
+
+        identifiers = {str(entry["id"])} | {str(a) for a in (entry.get("aliases") or [])}
+        if finding.identifier in identifiers:
+            return entry
     return None
 
 

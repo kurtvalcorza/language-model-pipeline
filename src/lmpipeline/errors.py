@@ -37,6 +37,11 @@ class Code:
     # -- split resolution ------------------------------------------------------
     DATASET_SPLIT_MISSING = "DATASET_SPLIT_MISSING"
     DATASET_SPLIT_AMBIGUOUS = "DATASET_SPLIT_AMBIGUOUS"
+    # A confidently recognized upload from another DIMER pipeline. Distinct from
+    # DATASET_SPLIT_MISSING because the user's mistake is different: nothing about this
+    # upload was meant for the language-model pipeline, so "add train.jsonl" is the wrong
+    # advice. Raised only on an unmistakable structural signature; see datasets/foreign.py.
+    DATASET_WRONG_PIPELINE = "DATASET_WRONG_PIPELINE"
     # A split that is transport-valid but too large to ingest. Distinct from
     # DATASET_ARCHIVE_TOO_LARGE: this one also fires for mounted directories, which carry
     # no archive metadata to bound.

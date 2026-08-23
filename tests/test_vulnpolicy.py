@@ -19,10 +19,11 @@ import datetime as dt
 import pytest
 import yaml
 
-from lmpipeline.vulnpolicy import (
+from lmpipeline.vulnpolicy import (  # noqa: I001
     POLICY_PATH,
     Finding,
     PolicyError,
+    ScanError,
     evaluate,
     load_policy,
     parse_pip_audit,
@@ -205,7 +206,7 @@ def test_pip_audit_output_is_parsed():
 
 
 def test_trivy_output_is_parsed():
-    doc = {"Results": [{"Vulnerabilities": [
+    doc = {"SchemaVersion": 2, "Results": [{"Vulnerabilities": [
         {"VulnerabilityID": "CVE-1", "PkgName": "libssl", "InstalledVersion": "1.0",
          "Severity": "CRITICAL", "FixedVersion": "1.1"},
         {"VulnerabilityID": "CVE-2", "PkgName": "zlib", "InstalledVersion": "1.0",
@@ -216,9 +217,17 @@ def test_trivy_output_is_parsed():
     assert findings[1].fix is None
 
 
-def test_empty_scanner_output_is_not_a_crash():
-    assert parse_pip_audit({}) == []
-    assert parse_trivy({}) == []
+def test_empty_scanner_output_is_now_refused_rather_than_read_as_clean():
+    """This test previously asserted the DEFECT.
+
+    It required `parse_*({}) == []`, i.e. that a crashed scanner's empty output be read as
+    zero findings -- which is precisely how a broken gate turns green. The behaviour is
+    deliberately reversed: an incomplete document is now a ScanError.
+    """
+    with pytest.raises(ScanError):
+        parse_pip_audit({})
+    with pytest.raises(ScanError):
+        parse_trivy({})
 
 
 def test_render_names_the_blocking_findings():
@@ -269,3 +278,238 @@ def test_the_policy_file_ships_inside_the_package():
     """It must reach the containers, which vendor the package rather than the repo."""
     assert POLICY_PATH.is_file()
     assert POLICY_PATH.parent.name == "data"
+
+
+# -- scan ingestion must fail closed ------------------------------------------------
+#
+# An empty document is what a CRASHED scanner leaves behind. Reading it as zero findings
+# turns a broken gate into a green one -- the same defect as a cross-repo check reporting
+# success when its credential is absent.
+#
+# Found by falling into it: a probe that swallowed stderr reported `raw: {}` and PASS for a
+# base image that in fact carries 21 blocking findings.
+#
+# The invariant is NOT "Results must be non-empty". A genuinely clean image legitimately has
+# none, and rejecting that would make the gate lie in the other direction. It is that a
+# COMPLETED document must be distinguishable from missing output.
+
+
+def test_a_clean_trivy_scan_is_accepted():
+    """{"SchemaVersion": 2, "Results": []} is a real scan of a clean image."""
+    assert parse_trivy({"SchemaVersion": 2, "Results": []}) == []
+
+
+def test_trivy_omitting_results_entirely_is_still_a_clean_scan():
+    """Trivy omits Results when the target has nothing analysable. Completed, not failed."""
+    assert parse_trivy({"SchemaVersion": 2, "ArtifactName": "scratch"}) == []
+
+
+def test_an_empty_trivy_document_is_refused():
+    """The regression: `{}` used to parse as zero findings and pass the gate."""
+    with pytest.raises(ScanError, match="SchemaVersion"):
+        parse_trivy({})
+
+
+def test_malformed_trivy_results_are_refused():
+    with pytest.raises(ScanError, match="malformed"):
+        parse_trivy({"SchemaVersion": 2, "Results": "not a list"})
+
+
+def test_non_dict_trivy_output_is_refused():
+    with pytest.raises(ScanError):
+        parse_trivy([])
+
+
+def test_a_clean_pip_audit_is_accepted():
+    assert parse_pip_audit({"dependencies": []}) == []
+
+
+def test_an_empty_pip_audit_document_is_refused():
+    with pytest.raises(ScanError, match="dependencies"):
+        parse_pip_audit({})
+
+
+def test_malformed_pip_audit_dependencies_are_refused():
+    with pytest.raises(ScanError, match="malformed"):
+        parse_pip_audit({"dependencies": {}})
+
+
+def test_the_real_failure_this_prevents():
+    """End to end: a crashed scanner must not be able to produce a passing gate.
+
+    Before this change the sequence below returned an empty finding list, which evaluate()
+    scored as ok -- a green gate over an image nobody had scanned.
+    """
+    with pytest.raises(ScanError):
+        evaluate(parse_trivy({}), policy=_policy(), scope="finetuner", today=TODAY)
+
+
+# -- package-level exceptions -------------------------------------------------------
+#
+# Opt-in, and deliberately broader than an id match: it covers advisories not yet
+# published. That is right only when the reachability argument is about the PACKAGE rather
+# than any individual CVE -- "nothing in this image can consume these files at all" -- and
+# it is why the mode must be stated explicitly rather than inferred.
+#
+# The need was found by testing against a real scan: a package-shaped exception written
+# without this mode matched nothing and would have merged as an inert no-op that looked
+# like a fix.
+#
+# Breadth over CVEs is the point; breadth over ARTEFACTS is a bug. A reachability argument
+# is evidence about one measured thing -- this package, at this version, as this scanner
+# sees it -- so the match binds to source + package + installed version + scope, inside the
+# expiry. The tests below prove each of those five actually excludes, because an exception
+# that quietly stopped excluding would look exactly like one that works.
+
+
+def _pkg_exception(match="package", scope=("finetuner",), expires="2099-01-01",
+                   source="trivy", installed="5.15.0-151.161"):
+    entry = {
+        "id": "linux-libc-dev-kernel-headers", "package": "linux-libc-dev",
+        "match": match, "scope": list(scope), "owner": "kurtvalcorza",
+        "expires": expires, "rationale": "no compiler in the image can consume headers",
+    }
+    if source is not None:
+        entry["source"] = source
+    if installed is not None:
+        entry["installed"] = installed
+    return _policy(exceptions=[entry])
+
+
+def _kernel_finding(identifier="CVE-2025-38724", installed="5.15.0-151.161",
+                    source="trivy"):
+    return Finding(source, identifier, "linux-libc-dev", installed,
+                   "CRITICAL", "5.15.0-185.195")
+
+
+def test_a_package_exception_covers_every_cve_in_that_package():
+    findings = [_kernel_finding("CVE-2025-38724"), _kernel_finding("CVE-2026-43011")]
+    decision = evaluate(findings, policy=_pkg_exception(), scope="finetuner", today=TODAY)
+    assert decision.ok
+    assert len(decision.excepted) == 2
+
+
+def test_a_package_exception_covers_an_advisory_it_has_never_seen():
+    """The point of package matching, and the reason it must be opt-in."""
+    decision = evaluate([_kernel_finding("CVE-2099-99999")], policy=_pkg_exception(),
+                        scope="finetuner", today=TODAY)
+    assert decision.ok
+
+
+def test_a_package_exception_does_not_cover_other_packages():
+    other = Finding("trivy", "CVE-1", "openssl", "1.0", "CRITICAL", "1.1")
+    decision = evaluate([other], policy=_pkg_exception(), scope="finetuner", today=TODAY)
+    assert not decision.ok
+
+
+def test_a_package_exception_does_not_cover_another_version_of_the_same_package():
+    """The base-refresh case, and the reason the binding exists.
+
+    The evidence is about linux-libc-dev 5.15.0-151.161 specifically. A base refresh to
+    2.11.0 ships 6.8.0-106.106 -- a NEWER VULNERABLE VERSION of the same package, measured
+    at 19 fixable CRITICAL findings. Nobody re-argued reachability for it, so it must block
+    on its own rather than inherit an exception written for a different artefact.
+    """
+    upgraded = _kernel_finding("CVE-2026-9001", installed="6.8.0-106.106")
+    decision = evaluate([upgraded], policy=_pkg_exception(), scope="finetuner", today=TODAY)
+    assert not decision.ok
+    assert len(decision.blocking) == 1 and not decision.excepted
+
+
+def test_a_package_exception_does_not_cover_another_scanner_source():
+    """A Trivy image argument says nothing about a pip-audit dependency finding.
+
+    Same package name, same version, different scanner -- and a different question. The
+    image argument is "nothing in this image can consume these headers"; it is not evidence
+    about a Python dependency we pin ourselves and could simply bump.
+    """
+    from_pip = _kernel_finding("PYSEC-9999", source="pip-audit")
+    decision = evaluate([from_pip], policy=_pkg_exception(), scope="finetuner", today=TODAY)
+    assert not decision.ok
+    assert len(decision.blocking) == 1 and not decision.excepted
+
+
+def test_a_package_exception_without_a_source_is_rejected(tmp_path):
+    """Refused at load, not silently ignored: an unbound package match is the whole risk."""
+    path = tmp_path / "policy.yaml"
+    path.write_text(yaml.safe_dump(_pkg_exception(source=None)), encoding="utf-8")
+    with pytest.raises(PolicyError, match="source"):
+        load_policy(path)
+
+
+def test_a_package_exception_without_an_installed_version_is_rejected(tmp_path):
+    path = tmp_path / "policy.yaml"
+    path.write_text(yaml.safe_dump(_pkg_exception(installed=None)), encoding="utf-8")
+    with pytest.raises(PolicyError, match="installed"):
+        load_policy(path)
+
+
+def test_a_package_exception_naming_a_scanner_that_does_not_exist_is_rejected(tmp_path):
+    """An unmatched source makes the entry inert -- exactly the no-op this mode was born of."""
+    path = tmp_path / "policy.yaml"
+    path.write_text(yaml.safe_dump(_pkg_exception(source="grype")), encoding="utf-8")
+    with pytest.raises(PolicyError, match="grype"):
+        load_policy(path)
+
+
+def test_id_matching_does_not_require_the_package_binding(tmp_path):
+    """The extra burden lands on the broad mode only; id matches are unchanged."""
+    doc = _policy(exceptions=[{
+        "id": "PYSEC-2026-2288", "package": "transformers", "scope": ["finetuner"],
+        "owner": "k", "expires": "2099-01-01", "rationale": "no Trainer in this repo",
+    }])
+    path = tmp_path / "policy.yaml"
+    path.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    assert load_policy(path)["exceptions"][0]["id"] == "PYSEC-2026-2288"
+
+
+def test_a_package_exception_still_respects_scope():
+    decision = evaluate([_kernel_finding()], policy=_pkg_exception(scope=("finetuner",)),
+                        scope="validator", today=TODAY)
+    assert not decision.ok
+
+
+def test_a_package_exception_still_expires():
+    decision = evaluate([_kernel_finding()], policy=_pkg_exception(expires="2026-08-21"),
+                        scope="finetuner", today=TODAY)
+    assert not decision.ok
+    assert decision.expired
+
+
+def test_id_matching_remains_the_default():
+    """An exception without `match` must NOT silently become package-wide."""
+    policy = _policy(exceptions=[{
+        "id": "CVE-2025-38724", "package": "linux-libc-dev", "scope": ["finetuner"],
+        "owner": "k", "expires": "2099-01-01", "rationale": "specific advisory only",
+    }])
+    decision = evaluate([_kernel_finding("CVE-2025-38724"), _kernel_finding("CVE-OTHER")],
+                        policy=policy, scope="finetuner", today=TODAY)
+    assert not decision.ok
+    assert len(decision.excepted) == 1 and len(decision.blocking) == 1
+
+
+def test_an_unknown_match_mode_is_rejected(tmp_path):
+    doc = _policy(exceptions=[{
+        "id": "X", "package": "p", "match": "regex", "scope": ["finetuner"],
+        "owner": "o", "expires": "2099-01-01", "rationale": "r",
+    }])
+    path = tmp_path / "policy.yaml"
+    path.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    with pytest.raises(PolicyError, match="match="):
+        load_policy(path)
+
+
+def test_the_committed_kernel_header_exception_is_package_scoped_to_the_finetuner():
+    """Guards the real entry against being silently widened or narrowed."""
+    policy = load_policy()
+    entry = next(e for e in policy["exceptions"] if e["package"] == "linux-libc-dev")
+    assert entry["match"] == "package"
+    assert entry["scope"] == ["finetuner"]
+    assert entry["expires"] == "2026-11-22"
+    # Bound to the artefact the rationale was measured on. Verified 2026-08-22 against the
+    # real scan of the pinned base: all 4,550 linux-libc-dev findings, the 21 blocking ones
+    # included, report exactly this version.
+    assert entry["source"] == "trivy"
+    assert entry["installed"] == "5.15.0-151.161"
+    for expected in ("no cc, gcc or nvcc", "REASSESS", "seven packages"):
+        assert expected in entry["rationale"]

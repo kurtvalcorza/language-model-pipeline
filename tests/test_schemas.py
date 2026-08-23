@@ -129,11 +129,11 @@ def _validation_success() -> dict:
         code=Code.VALIDATION_SUCCEEDED,
         dataset_summary={"source": "directory", "fileCount": 2},
         provenance={
-            "baseModel": "Qwen/Qwen3-1.7B",
-            "baseModelRevision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+            "modelScope": "model-agnostic",
+            "tokenizerChecks": "finetuner",
         },
     )
-    result.add_check("model_approved", True, "Base model pinned.")
+    result.add_check("splits_resolved", True, "Found train, validation.")
     return result.to_dict()
 
 
@@ -159,6 +159,26 @@ def _training_success() -> dict:
 
 def test_a_real_validation_success_validates():
     validate_document(VALIDATION_RESULT, _validation_success())
+
+
+def test_a_validation_success_must_state_its_model_agnostic_scope():
+    """C-1: the validator cannot know the model, so its pass must not imply one."""
+    document = _validation_success()
+    del document["metadata"]["languageModelPipeline"]["provenance"]["modelScope"]
+    with pytest.raises(SchemaError):
+        validate_document(VALIDATION_RESULT, document)
+
+
+def test_a_validation_success_naming_a_model_is_rejected():
+    """A model claim here would be a claim the container cannot verify — the exact
+    false-provenance shape the C-1 audit caught. The schema refuses it outright rather
+    than letting it ride along as an ignored extra field."""
+    document = _validation_success()
+    document["metadata"]["languageModelPipeline"]["provenance"]["baseModel"] = (
+        "Qwen/Qwen3-1.7B"
+    )
+    with pytest.raises(SchemaError):
+        validate_document(VALIDATION_RESULT, document)
 
 
 def test_a_real_training_success_validates():

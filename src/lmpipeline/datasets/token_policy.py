@@ -21,6 +21,7 @@ checks were worth having when the validator ran them.
 
 from __future__ import annotations
 
+import math
 import statistics
 from dataclasses import dataclass
 from typing import Any
@@ -61,11 +62,12 @@ def _percentile(values: list[int], fraction: float) -> int:
 
     Deliberately not interpolated: these numbers are compared against integer token
     ceilings, and an interpolated p99 that lands between two real examples would describe
-    a sequence length no example actually has.
+    a sequence length no example actually has. Nearest-rank is rank ``ceil(p * n)`` in the
+    sorted sample, converted to a zero-based index here.
     """
     if not values:
         return 0
-    index = max(0, min(len(values) - 1, int(round(fraction * len(values) + 0.5)) - 1))
+    index = max(0, min(len(values) - 1, math.ceil(fraction * len(values)) - 1))
     return values[index]
 
 

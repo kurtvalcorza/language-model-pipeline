@@ -1,5 +1,12 @@
 # DIMER Deployment & Runtime Contract
 
+> **⚠ Parts of this document are known wrong.** It was transcribed from the rendered
+> portal page. A 2026-08-23 re-read of the backend source (`dimer-backend@on-prem`)
+> contradicts it on the validator's environment, on what `dimer-pipeline.json` does, on
+> model selection, on GPU availability, and on what `/data` is. **`COMPLIANCE.md` is
+> normative** where the two disagree, and lists which claims here it supersedes. This
+> document is revised separately, once the two open PRs editing it have landed.
+
 The observed DIMER platform contract, with each claim's evidence. Anything marked
 **unverified** has not been confirmed against a running Job and must be re-checked by the
 PR 0 probe before it is relied on.

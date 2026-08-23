@@ -216,7 +216,7 @@ decisions were sound given what was known then, and so were the replacements.
 | DIMER registrations are model-specific, one per model | Resource-tier registrations using a Base Model sentinel (`lm-sft-12gb-qlora`) | **Itself superseded.** A model channel does reach the finetuner — `DIMER_MODEL_CONFIG_JSON`, resolved from a registered `model_id` against `schema.model.fineTunableModels`. The sentinel was argued from the *absence* of such a channel and now needs re-arguing against one that exists (`COMPLIANCE.md` C-2) |
 | Base Model is authoritative for model selection | `model_key`, carried in `DIMER_PREPROCESSING_ARGS_JSON` | **Partly superseded.** Base Model is still not delivered, so the blueprint rule stays overturned. But the platform's own selector is `model_id` in `DIMER_HYPERPARAMETERS_JSON` — the backend normalizes legacy `base_model` into it and pops it — so `model_key` is a name DIMER sends only if we register it under exactly that name (`COMPLIANCE.md` C-8) |
 | Do **not** expose `model_key` in `dimer-pipeline.json` | `model_key` is exposed there, as an enum of registry keys | **Superseded, and the justification was wrong.** `dimer-pipeline.json` is not read by anything; parameters live in the pipeline registry and are set through the Builder UI. The earlier claim that this channel was "proven to reach both containers" does not hold: **the validator receives four environment variables and this is not one of them** (`COMPLIANCE.md` C-1, C-8) |
-| Base Model must reach the validator before multi-model validation proceeds | Model provenance recorded in result/artifact/model-card output rather than trusted from the registration row | **Stands.** A registration row cannot be kept honest; a hash-covered artifact can. Note the irony the audit exposes: *nothing* reaches the validator that identifies the model, which makes the blueprint's concern more acute than when it was written, not less (`COMPLIANCE.md` C-1) |
+| Base Model must reach the validator before multi-model validation proceeds | Model provenance recorded in result/artifact/model-card output rather than trusted from the registration row | **Stands.** A registration row cannot be kept honest; a hash-covered artifact can. The audit then dissolved the premise entirely: *nothing* reaches the validator that identifies the model, and the C-1 decision (validator #10, option 2) makes that a feature — the validator is model-agnostic, and every tokenizer-specific check moves to the finetuner, the one container that does learn the selection |
 
 Three things this supersession does **not** do:
 
@@ -225,6 +225,8 @@ Three things this supersession does **not** do:
   entries are accepted for a family the built-in catalog does not know, and what
   `baseWeights` means for a Hugging Face repo id (`COMPLIANCE.md` C-2).
 - It does not mark §6 verified. Those items remain open, and most stay blocked behind #5.
-- It does not settle model selection. That is now an open architecture question with a real
-  mechanism on the other side of it, which is a better position than the one this section
-  was originally written in.
+- It does not settle model selection **for the finetuner**. How our models get registered
+  so `DIMER_MODEL_CONFIG_JSON` carries a real selection is an open architecture question
+  with a real mechanism on the other side of it (`COMPLIANCE.md` C-2) — a better position
+  than the one this section was originally written in. The **validator** side is settled:
+  by the C-1 decision it is model-agnostic and needs no selection at all.

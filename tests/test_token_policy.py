@@ -65,8 +65,17 @@ def test_it_returns_what_it_measured_rather_than_just_passing(entry):
     assert report.to_dict()["budget"] == MAX_TOTAL_TRAIN_TOKENS
 
 
+def test_percentiles_use_exact_nearest_rank_boundaries():
+    """Nearest-rank is ceil(p*n), not rounding a half-shifted floating rank."""
+    twenty = summarize(list(range(1, 21)))
+    hundred = summarize(list(range(1, 101)))
+
+    assert twenty.p95 == 19
+    assert hundred.p99 == 99
+
+
 def test_percentiles_are_never_interpolated():
-    """An interpolated p99 would describe a length no example actually has."""
+    """An interpolated percentile would describe a length no example actually has."""
     stats = summarize([1, 2, 3, 100])
     assert stats.p99 in (1, 2, 3, 100)
     assert stats.maximum == 100

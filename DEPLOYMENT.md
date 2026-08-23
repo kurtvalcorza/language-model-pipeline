@@ -101,6 +101,63 @@ proven to reach **both** containers. Shipped Mitra's validator consumes
 `DIMER_PREPROCESSING_ARGS_JSON` (`validator.py:245`) for `target_column`, which is declared
 in the finetuner's manifest — and that pipeline passed acceptance.
 
+### Mount topology our publication design requires
+
+> **These are requirements OUR IMPLEMENTATION imposes, not a platform contract**, and the
+> design that imposes them is itself under review. `COMPLIANCE.md` C-6 records that `/data`
+> is a Mountpoint-for-S3 volume where renames and in-place edits are documented as
+> unreliable — which is exactly what `os.replace` is. Whether the atomic-rename design works
+> there at all is **unverified**. Read this section as "what the current implementation
+> needs", and expect it to change if staging moves to local scratch.
+
+**Undocumented by the platform, and violating it fails a Job after training has already
+finished.** Found on the first real end-to-end acceptance run (finetuner #3), not in
+review: a perfectly ordinary two-volume topology produced `PermissionError` on
+`/data/output/model.staging`, reported as `RUNTIME_UNEXPECTED`, with the entire GPU budget
+already spent. That failure is real regardless of how the rename question resolves — the
+staging directory has to be creatable somewhere either way.
+
+Artifact publication currently stages into a **sibling** of `DIMER_OUTPUT_DIR` and finishes
+with `os.replace`, so the last step is an atomic rename on one filesystem and no consumer
+ever observes a half-written artifact. The guarantee is worth keeping; where it is
+implemented may have to move. As implemented today it imposes three requirements on however
+the volumes are mounted:
+
+| Requirement | Why | Refused at preflight as |
+|---|---|---|
+| The **parent** of `DIMER_OUTPUT_DIR` must be writable by the container uid | Staging is created there | `CONFIG_OUTPUT_UNWRITABLE` |
+| `DIMER_OUTPUT_DIR` must be removable — not itself a bind-mount point, not a symlink | `publish()` calls `shutil.rmtree` on it first; `rmtree` returns `EBUSY` on a mount point and refuses a symlink outright | `CONFIG_OUTPUT_UNWRITABLE` |
+| Staging and output must be on **one filesystem** | `os.replace` cannot rename across filesystems | `CONFIG_OUTPUT_UNWRITABLE` |
+
+**Mount the output volume one level up**, at the parent, rather than mounting the output
+directory itself:
+
+```
+# works
+-v "$out":/data/output
+
+# fails after training, with /data/output owned by root inside the container
+-v "$out/result":/data/output/result
+-v "$out/model":/data/output/model
+```
+
+The model cache carries the same kind of requirement for a different reason: nothing in the
+platform contract promises a writable `HF_HOME`, and discovering that after a multi-gigabyte
+download has begun is the expensive version of the same failure. Refused as
+`CONFIG_CACHE_UNWRITABLE`.
+
+Both are probed by **actually writing**, not by reading `st_mode`: a directory can be mode
+0755 and still refuse writes on a read-only mount, a full filesystem, an exhausted quota, or
+for a uid the mode bits do not favour — and `os.access()` lies under those conditions too.
+
+**Open, and worth settling before this section is relied on** (`COMPLIANCE.md` C-5, C-6):
+Mountpoint-for-S3 supports neither the metadata updates that our permission normalization
+verifies nor, reportedly, reliable renames. If both hold, the resolution is to move the
+staging directory to local scratch and write final files once into `/data` — which would
+retire the same-filesystem requirement above and keep the no-half-written-artifact
+guarantee. That needs one run against a real session PV to confirm; it is not a change to
+make on an inference.
+
 ---
 
 ## 2. The done callback is mandatory

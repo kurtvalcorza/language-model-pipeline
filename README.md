@@ -39,17 +39,27 @@ The registry deliberately has **no copy at the repo root**. One file, no drift.
 
 ## Model selection
 
-DIMER's Pipeline Builder *Base Model* field is **not** delivered to Jobs — see DEPLOYMENT.md
-§1 for the evidence. The authoritative runtime selector is `model_key`, declared once in the
-finetuner's `dimer-pipeline.json` under `datasetPreprocessing` as an `enum` of internal
-registry keys, and delivered through `DIMER_PREPROCESSING_ARGS_JSON` — the only user-parameter
-channel proven to reach both containers.
+> **Corrected by the 2026-08-23 source-verified audit** (`COMPLIANCE.md`, normative). Two
+> claims this section used to make are false: `dimer-pipeline.json` **is not read by
+> anything** — parameters live in the pipeline registry and are set through the Builder UI
+> (C-8) — and `DIMER_PREPROCESSING_ARGS_JSON` reaches only the **finetuner**; a validator
+> Job receives four environment variables and that is not one of them (C-1).
 
-Consequences:
-- Arbitrary Hugging Face IDs are never user-supplied; the enum holds approved keys only.
+DIMER's Pipeline Builder *Base Model* field is **not** delivered to Jobs — see DEPLOYMENT.md
+§1 for the evidence. What the platform actually sends the finetuner is `model_id` in
+`DIMER_HYPERPARAMETERS_JSON`, resolved against the pipeline's registered
+`fineTunableModels`, plus the selected entry in `DIMER_MODEL_CONFIG_JSON`. Getting our
+registry keys registered so that channel carries a real selection is open as #33 (C-2).
+`dimer-pipeline.json` remains in the finetuner repo as a **transcription aid for filling in
+the Builder UI** — documentation, not configuration.
+
+Consequences that survive the correction:
+- Arbitrary Hugging Face IDs are never user-supplied; only approved registry keys resolve.
 - Where the platform *does* expose Base Model, the runtime asserts it agrees with the resolved
   entry and fails on conflict.
-- DIMER registrations map to **GPU/resource tiers**, not to individual models.
+- The **validator** needs no selection at all: by the C-1 decision (validator #10, option 2)
+  it is model-agnostic, and every tokenizer-specific check runs in the finetuner before
+  weights load.
 
 ## Consuming the package
 
@@ -126,15 +136,19 @@ The fifth registry entry, `phi-4-mini-instruct`, is absent from the matrix by co
 `microsoft/Phi-4-mini-instruct` carries the Hub's `custom_code` tag and its documented usage
 requires `trust_remote_code=True`, so SECURITY.md holds it at `enabled: false`,
 `approval_state: blocked`, `revision: null`. Verified 2026-08-22 that this is enforced rather
-than merely declared, at three independent layers:
+than merely declared. Three layers were tested then; the audit later established that the
+first is decorative — `dimer-pipeline.json` is read by nothing (C-8) — so enforcement rests
+on the two container layers, which is where it belonged all along:
 
 | Layer | Behaviour with `model_key=phi-4-mini-instruct` |
 |---|---|
-| `dimer-pipeline.json` enum | `['qwen3-1.7b', 'qwen3-4b', 'granite-4.1-3b']` — not offered, unreachable from the Workbench |
+| `dimer-pipeline.json` enum | `['qwen3-1.7b', 'qwen3-4b', 'granite-4.1-3b']` — **decorative**: the file is not read by the platform (C-8) |
 | Validator container | exit 1, `MODEL_DISABLED`, structured result written |
 | Finetuner container | exit 1, `MODEL_DISABLED`, structured result written |
 
 Both containers raise from `ModelRegistry.resolve`, which runs **before** any weight fetch.
+Once the C-1 model-agnostic change lands, the validator layer retires too — it will resolve
+no model — leaving the finetuner as the sole and sufficient enforcement point.
 Nothing is downloaded and no code path that could honour `trust_remote_code` is ever reached
 — the gate is not a download-then-check. The model-registry schema encodes the same invariant
 (`requires_trust_remote_code: true` implies the entry is disabled), so the registry cannot

@@ -44,7 +44,16 @@ recorded so an auditor can see which was authoritative.
 
 Exact package versions plus the pinned revision plus the dataset digest plus the resolved
 job configuration are together enough to re-run a job and expect the same result, subject
-to GPU non-determinism.
+to GPU non-determinism — **within one image**.
+
+**Across a rebuild, no such claim is made, because none is possible** (`COMPLIANCE.md`
+C-12): the platform build pushes `:latest`, the pipeline stores a bare repository URI with
+no tag, and Jobs run with `imagePullPolicy: Always`. A rebuild silently changes the image
+every future run uses, and nothing in the platform can pin or roll it back. Provenance
+therefore makes a completed run **auditable** — every version, revision and digest that
+produced it is recorded — but cannot make two runs separated by a rebuild identical. The
+pinned base image in the Dockerfile narrows the drift; it does not close it, because the
+application layer is rebuilt on top.
 
 **Bitwise GPU determinism is not claimed** and should not be inferred. Seeds cover data
 shuffling, the derived validation split, and adapter initialization.

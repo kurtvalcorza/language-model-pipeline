@@ -53,8 +53,11 @@ discarded.
 
 Two layers, and the registry always wins:
 
-- `dimer-pipeline.json` advertises one envelope shared by every registration using the
-  repository, so it must be safe for the **tightest** enabled model.
+- `dimer-pipeline.json` documents one envelope shared by every registration using the
+  repository, so it must be safe for the **tightest** enabled model. It documents rather
+  than enforces: the platform does not read the file (`COMPLIANCE.md` C-8) — the envelope
+  it describes must be entered in the Builder UI, and the registry below is what actually
+  refuses an out-of-bounds value at runtime.
 - The model registry holds the authoritative per-model ceiling.
 
 A request above the ceiling **fails**. Nothing is silently clamped: a user who asked for

@@ -46,7 +46,7 @@ handle this), and an LM pipeline receives `"taskType": "object_detection"` becau
 | C-7 | **P1** | finetuner | GPU burst mode unhandled: trains, then loses everything | confirmed |
 | C-8 | **P2** | both | Parameters are not registered, so every knob silently falls back | confirmed |
 | C-9 | **P2** | security | A merged vulnerability exception rests on a constraint that does not exist | confirmed |
-| C-10 | **P2** | validator | The 300 s budget is reachable by a dataset our own cap admits | measured |
+| C-10 | ~~P2~~ **P3** | validator | 300 s margin is 1.7-2.5x on a workstation, unmeasured on the target node | measured, **downgraded** |
 | C-11 | **P3** | validator | Nested zip is rejected where the platform prefers unwrapping | by choice |
 | C-12 | **P3** | both | `:latest` on the built image means no run is reproducible | confirmed |
 
@@ -202,20 +202,39 @@ process is supposed to prevent.
 The rationale needs correcting to cite `ModelRegistry.resolve()`. No change in the decision;
 a change in what the decision rests on.
 
-### C-10 — The 300 s validator budget is reachable **(measured, P2)**
+### C-10 — The 300 s validator margin is thin, not breached **(measured, P3 — downgraded)**
 
-The validator's hard timeout is **300 s**, and our own `MAX_TRAIN_EXAMPLES` is 500 000.
+**Corrected 2026-08-23 by measurement that contradicted the original finding.** This entry
+first claimed our cap admits datasets that *cannot* validate inside the budget. Running the
+whole validator rather than extrapolating from one stage shows that is wrong on the hardware
+available here, so the severity drops from P2 to P3 and the recommended action changes.
 
-Measured on this workstation with the real `Qwen/Qwen3-0.6B` tokenizer, 304-token examples:
-**3 244 examples/s**, 986 k tokens/s single-threaded — so 500 000 examples cost **≈154 s of
-tokenization alone**, before archive extraction from an S3-backed mount, duplicate
-fingerprinting, and split-leakage comparison. A CodeBuild-class 2 vCPU node is slower than
-this desktop.
+The validator's hard timeout is **300 s** and our `MAX_TRAIN_EXAMPLES` is 500 000. Measured
+end to end through `validate()` with the real `Qwen/Qwen3-0.6B` tokenizer at its pinned
+revision, on this workstation:
 
-Our cap therefore admits datasets that cannot be validated inside the platform's budget, and
-a timeout produces no result document at all — the one outcome the contract cannot report.
-Either the cap comes down, or ingestion gets a wall-clock guard that fails with a stable code
-before the platform kills the Job.
+| dataset | outcome | wall time | margin vs 300 s |
+|---|---|---|---|
+| 500 000 short examples, 64 MB | **accepted** — the largest dataset that can legitimately pass | **118.7 s** | 2.5x |
+| 500 000 long examples, 278 MB | rejected, `DATASET_TOKEN_BUDGET_EXCEEDED` | **178.7 s** | 1.7x |
+| 500 000 examples, tokenizer absent | parse + normalize + fingerprint + leakage only | **8.0 s** | — |
+
+That third row is the correction. The original estimate assumed archive handling, duplicate
+fingerprinting and split-leakage comparison would add materially to the ~154 s of
+tokenization. They add **about 8 s at 500 000 examples** — tokenization is roughly 93% of the
+cost, and the rest is noise.
+
+**What remains true, and is the reason this is not closed.** The margin is 1.7–2.5x on a
+workstation, and neither figure was measured on the target: a CodeBuild-class 2 vCPU node,
+reading an archive from an S3-backed mount rather than local disk. A node ~2.5x slower than
+this one breaches the budget on the accepted path, and a timeout produces no result document
+at all — the one outcome the contract cannot report on.
+
+**So the action changes from "lower the cap" to "measure before changing anything."** Lowering
+`MAX_TRAIN_EXAMPLES` on the strength of a desktop number would reject datasets the platform
+accepts, which is the failure `resolver.py` already warns about for the byte bounds (#11). A
+wall-clock guard that fails with a stable code before the platform kills the Job is cheap and
+useful regardless of where the true ceiling sits, and does not require knowing it.
 
 ### C-11 — Nested zip: we reject, the platform prefers unwrapping **(P3, by choice)**
 

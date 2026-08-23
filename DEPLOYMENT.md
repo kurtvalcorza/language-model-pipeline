@@ -202,21 +202,29 @@ architecture back to an assumption the platform has already falsified. That is a
 for an agent-assisted repository, where the blueprint reads as an instruction rather than
 as a historical position.
 
-This document is normative on every point below. #1 remains the record of what was
-originally designed and why, which is worth keeping — the decisions were sound given what
-was known then.
+**Read this table as history, not as a settled contract.** The 2026-08-23 source-verified
+audit (`COMPLIANCE.md`) invalidated part of what replaced the blueprint, so several rows now
+carry a second correction on top of the first. The status column says which. Nothing here is
+normative on its own any more: where a row's replacement is marked *itself superseded*,
+`COMPLIANCE.md` governs.
 
-| Blueprint rule (#1) | Superseded by | Evidence |
+#1 remains the record of what was originally designed and why, which is worth keeping — the
+decisions were sound given what was known then, and so were the replacements.
+
+| Blueprint rule (#1) | What replaced it | Status of the replacement |
 |---|---|---|
-| DIMER registrations are model-specific, one per model | Registrations are **resource-tier** registrations using a Base Model sentinel (`lm-sft-12gb-qlora`) | §1, *What to enter in Base Model*. `dimer-pipeline.json` is per **image**, not per registration, so a per-model registration cannot constrain which model runs anyway |
-| Base Model is authoritative for model selection | **`model_key` is the authoritative runtime selector**, declared under `datasetPreprocessing` | §1, *Base Model does not reach the container*. Portal's environment table has no Base Model entry; backend injects three variables into validator Jobs |
-| Do **not** expose `model_key` in `dimer-pipeline.json` | `model_key` is exposed there, as an enum of registry keys | Same. It is the only user-parameter channel proven to reach both containers, via `DIMER_PREPROCESSING_ARGS_JSON` |
-| Base Model must reach the validator before multi-model validation proceeds | Model provenance is **recorded in result/artifact/model-card output** rather than trusted from the registration row | §1, provenance table. A registration row cannot be kept honest; a hash-covered artifact can |
+| DIMER registrations are model-specific, one per model | Resource-tier registrations using a Base Model sentinel (`lm-sft-12gb-qlora`) | **Itself superseded.** A model channel does reach the finetuner — `DIMER_MODEL_CONFIG_JSON`, resolved from a registered `model_id` against `schema.model.fineTunableModels`. The sentinel was argued from the *absence* of such a channel and now needs re-arguing against one that exists (`COMPLIANCE.md` C-2) |
+| Base Model is authoritative for model selection | `model_key`, carried in `DIMER_PREPROCESSING_ARGS_JSON` | **Partly superseded.** Base Model is still not delivered, so the blueprint rule stays overturned. But the platform's own selector is `model_id` in `DIMER_HYPERPARAMETERS_JSON` — the backend normalizes legacy `base_model` into it and pops it — so `model_key` is a name DIMER sends only if we register it under exactly that name (`COMPLIANCE.md` C-8) |
+| Do **not** expose `model_key` in `dimer-pipeline.json` | `model_key` is exposed there, as an enum of registry keys | **Superseded, and the justification was wrong.** `dimer-pipeline.json` is not read by anything; parameters live in the pipeline registry and are set through the Builder UI. The earlier claim that this channel was "proven to reach both containers" does not hold: **the validator receives four environment variables and this is not one of them** (`COMPLIANCE.md` C-1, C-8) |
+| Base Model must reach the validator before multi-model validation proceeds | Model provenance recorded in result/artifact/model-card output rather than trusted from the registration row | **Stands.** A registration row cannot be kept honest; a hash-covered artifact can. Note the irony the audit exposes: *nothing* reaches the validator that identifies the model, which makes the blueprint's concern more acute than when it was written, not less (`COMPLIANCE.md` C-1) |
 
-Two things this supersession does **not** do:
+Three things this supersession does **not** do:
 
-- It does not close **#13**, which asks whether the Pipeline Builder accepts a free-text
-  Base Model value at all. The sentinel scheme depends on that and it is unconfirmed — the
-  sentinel is a working assumption, not a proven mechanism.
+- It does not close **#13**. The question has moved rather than been answered: not whether
+  the Pipeline Builder accepts a free-text Base Model value, but whether `fineTunableModels`
+  entries are accepted for a family the built-in catalog does not know, and what
+  `baseWeights` means for a Hugging Face repo id (`COMPLIANCE.md` C-2).
 - It does not mark §6 verified. Those items remain open, and most stay blocked behind #5.
-
+- It does not settle model selection. That is now an open architecture question with a real
+  mechanism on the other side of it, which is a better position than the one this section
+  was originally written in.

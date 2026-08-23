@@ -44,12 +44,18 @@
                   "code": {"const": "VALIDATION_SUCCEEDED"},
                   "provenance": {
                     "type": "object",
-                    "description": "A pass names the model it validated against, pinned. Otherwise the result cannot be tied to what it approved.",
+                    "description": "A pass states its scope rather than naming a model. The validator never learns which model the user selected (COMPLIANCE.md C-1), so by the decision on validator #10 it validates model-independent properties only, and every tokenizer-specific limit is enforced by the finetuner against the selected model before weights load. A document claiming a model here would be claiming something the container cannot know.",
                     "properties": {
-                      "baseModel": {"type": "string", "minLength": 1},
-                      "baseModelRevision": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+                      "modelScope": {"const": "model-agnostic"},
+                      "tokenizerChecks": {"const": "finetuner"}
                     },
-                    "required": ["baseModel", "baseModelRevision"]
+                    "required": ["modelScope", "tokenizerChecks"],
+                    "not": {
+                      "anyOf": [
+                        {"required": ["baseModel"]},
+                        {"required": ["baseModelRevision"]}
+                      ]
+                    }
                   }
                 },
                 "required": ["code", "provenance"]

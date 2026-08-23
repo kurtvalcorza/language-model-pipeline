@@ -67,6 +67,28 @@ is the pipeline's default, not the user's choice, so a user who picks a differen
 be validated against the wrong tokenizer. Note also that on the `main` backend branch the
 validator does not receive pipeline metadata at all, so any use of it needs a baked default.
 
+**Why the wrong inference looked well-evidenced.** `DEPLOYMENT.md` grounded the claim on
+shipped Mitra: its validator consumes `DIMER_PREPROCESSING_ARGS_JSON` for `target_column`,
+and that pipeline passed DIMER GPU acceptance. Both halves are true and the conclusion still
+does not follow, because `mitra-classifier-dataset-validator/validator.py:253` reads
+
+```python
+target_column=str(preprocessing.get("target_column") or "target").strip(),
+```
+
+**It has a default.** With the variable absent, `preprocessing` is `{}` and the column falls
+back to `"target"` — which is what Mitra's acceptance datasets use. It passed acceptance
+because the default was correct, not because the channel reached the validator. Ours has no
+default and hard-fails, so identical platform behaviour is invisible there and fatal here.
+
+Two consequences outside this repo, both worth checking rather than assuming: Mitra's
+`target_column` parameter is probably **inert at validation time**, so a user who sets it to
+anything but `target` would have the finetuner honour it while the validator checks a column
+named `target` — validation could reject a dataset training would accept (same shape in the
+regressor). And the general lesson: a silent fallback makes a missing channel
+indistinguishable from a working one, so acceptance passing is not evidence a variable
+arrived.
+
 **Needs a decision.** The options are not equivalent and the choice is yours:
 
 1. Validate against `defaultFineTunableModelId`, falling back to a baked default, and state

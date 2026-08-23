@@ -239,13 +239,14 @@ def test_render_names_the_blocking_findings():
 # -- the real advisories this repository actually carries ---------------------------
 
 
-def test_the_two_transformers_advisories_are_excepted_today():
-    """Grounded in the live pip-audit result, not a hypothetical.
+def test_the_two_transformers_advisories_are_finetuner_only_today():
+    """The exception must follow the package after C-1, not remain on the validator.
 
     transformers 4.57.1 carries five advisories; three have no fix anywhere and are
-    reported, two are fixed only in 5.0.0 / 5.3.0 -- major versions whose chat-template
-    rendering would change token counts and therefore which datasets validate. Both are
-    excepted with a reachability argument rather than silently ignored.
+    reported, two are fixed only in 5.0.0 / 5.3.0. The finetuner still carries transformers
+    and retains the reviewed exceptions. The model-agnostic validator no longer installs the
+    package, so an artificial transformers finding in validator scope must block rather than
+    inherit an exception written for a different image.
     """
     policy = load_policy()
     findings = [
@@ -253,11 +254,20 @@ def test_the_two_transformers_advisories_are_excepted_today():
         Finding("pip-audit", "PYSEC-2026-2289", "transformers", "4.57.1", "UNKNOWN", "5.3.0"),
         Finding("pip-audit", "PYSEC-2025-217", "transformers", "4.57.1", "UNKNOWN", None),
     ]
-    for scope in ("validator", "finetuner"):
-        decision = evaluate(findings, policy=policy, scope=scope, today=TODAY)
-        assert decision.ok, render(decision)
-        assert len(decision.excepted) == 2
-        assert len(decision.reported) == 1
+
+    finetuner = evaluate(findings, policy=policy, scope="finetuner", today=TODAY)
+    assert finetuner.ok, render(finetuner)
+    assert len(finetuner.excepted) == 2
+    assert len(finetuner.reported) == 1
+
+    validator = evaluate(findings, policy=policy, scope="validator", today=TODAY)
+    assert not validator.ok
+    assert len(validator.blocking) == 2
+    assert len(validator.reported) == 1
+
+    for identifier in ("PYSEC-2026-2288", "PYSEC-2026-2289"):
+        entry = next(e for e in policy["exceptions"] if e["id"] == identifier)
+        assert entry["scope"] == ["finetuner"]
 
 
 def test_those_exceptions_expire_and_then_block():

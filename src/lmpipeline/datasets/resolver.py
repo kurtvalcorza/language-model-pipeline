@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from ..errors import Code, DatasetError
+from .foreign import detect_foreign_dataset
 
 # Canonical split filenames. `val.jsonl` is the one accepted alias; if both it and
 # validation.jsonl are present the input is ambiguous and fails.
@@ -354,6 +355,19 @@ def resolve_dataset(dataset_dir: Path, *, workdir: Path) -> ResolvedDataset:
 
     for split in REQUIRED_SPLITS:
         if split not in splits:
+            # Before reporting what THIS pipeline wanted, check whether the upload is
+            # recognizably meant for another one. "Required split 'train' not found" is
+            # true but unhelpful for someone who uploaded an image dataset: it sends them
+            # looking for a missing file rather than at the pipeline they selected.
+            # Returns None unless the structure is unmistakable, so the message below
+            # remains the default rather than the fallback.
+            foreign = detect_foreign_dataset(root)
+            if foreign is not None:
+                raise DatasetError(
+                    foreign.message(),
+                    code=Code.DATASET_WRONG_PIPELINE,
+                    details={"detectedTask": foreign.task, **foreign.evidence},
+                )
             raise DatasetError(
                 f"Required split {split!r} not found. Expected one of: "
                 + ", ".join(SPLIT_CANDIDATES[split])

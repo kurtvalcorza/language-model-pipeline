@@ -1,16 +1,21 @@
-"""The DIMER container runtime contract.
+"""The DIMER container runtime contracts.
 
 Every DIMER-specific assumption lives here so the rest of the package stays platform-neutral
-and unit-testable. The variable set is transcribed from the DIMER AI Engineer portal
-documentation (see DEPLOYMENT.md), not guessed.
+and unit-testable. Source verification against the backend established that the validator and
+the finetuner receive different environment-variable sets, so they intentionally use
+different parsed views:
 
-Note the two facts that shape this module:
+* ``DimerValidationEnv`` reads only the four ``DIMER_``-namespace variables delivered to
+  validator Jobs: ``DIMER_DATASET_DIR``, ``DIMER_RESULT_PATH``, ``DIMER_DONE_CALLBACK`` and
+  ``DIMER_PIPELINE_METADATA_JSON``. The last is absent on the backend's ``main`` branch, so
+  it defaults to ``{}`` rather than being required. An on-prem deployment additionally
+  injects S3 credentials and object keys; those belong to the storage layer, not to this
+  parsed view, and are deliberately not read here.
+* ``DimerEnv`` is the broader finetuner-facing view. The finetuner receives model selection
+  and user parameters through channels the validator does not receive.
 
-  * DIMER's Pipeline Builder "Base Model" field is NOT reliably delivered to Jobs. The
-    authoritative runtime selector is `model_key`, carried in DIMER_PREPROCESSING_ARGS_JSON,
-    which is the only user-parameter channel proven to reach both containers.
-  * DIMER_DONE_CALLBACK must be POSTed even on crash, or the Workbench UI hangs at
-    "Validating..." until the sweeper times the run out.
+Keeping the two contracts distinct prevents a validator from accidentally depending on a
+finetuner-only variable and recreating COMPLIANCE.md C-1.
 """
 
 from __future__ import annotations
@@ -39,6 +44,10 @@ LOGGABLE_ENV_KEYS = (
     "DIMER_RUN_ID",
     "DIMER_TASK_TYPE",
 )
+VALIDATOR_LOGGABLE_ENV_KEYS = (
+    "DIMER_DATASET_DIR",
+    "DIMER_RESULT_PATH",
+)
 
 REDACTED = "<redacted>"
 
@@ -66,8 +75,40 @@ def _load_json_env(name: str) -> dict[str, Any]:
 
 
 @dataclass(frozen=True)
+class DimerValidationEnv:
+    """Source-verified environment delivered to a DIMER validator Job.
+
+    Do not add a field here merely because another Job type receives it. The absence of
+    preprocessing args and hyperparameters is part of the validator contract: the validator
+    therefore cannot know the user's selected model and must remain model-agnostic.
+    """
+
+    dataset_dir: Path
+    result_path: Path
+    done_callback: str
+    pipeline_metadata: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_environ(cls) -> DimerValidationEnv:
+        """Parse only variables the backend actually injects into validator Jobs."""
+        return cls(
+            dataset_dir=Path(os.getenv("DIMER_DATASET_DIR", "/data/dataset")),
+            result_path=Path(os.getenv("DIMER_RESULT_PATH", "/data/output/result/result.json")),
+            done_callback=os.getenv("DIMER_DONE_CALLBACK", "").strip(),
+            pipeline_metadata=_load_json_env("DIMER_PIPELINE_METADATA_JSON"),
+        )
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Validator env snapshot safe to embed in a result payload."""
+        snapshot = {key: os.getenv(key, "") for key in VALIDATOR_LOGGABLE_ENV_KEYS}
+        snapshot["DIMER_DONE_CALLBACK"] = REDACTED if self.done_callback else ""
+        snapshot["pipelineMetadataKeys"] = sorted(self.pipeline_metadata)
+        return snapshot
+
+
+@dataclass(frozen=True)
 class DimerEnv:
-    """Parsed view of the DIMER-injected environment."""
+    """Parsed view of the broader DIMER finetuner environment."""
 
     dataset_dir: Path
     result_path: Path
@@ -111,10 +152,11 @@ class DimerEnv:
 
     @property
     def model_key(self) -> str | None:
-        """The authoritative runtime model selector.
+        """Legacy image-side model key when supplied to the finetuner.
 
-        Declared once in dimer-pipeline.json under `datasetPreprocessing`, which is the
-        only user-parameter channel that reaches both the validator and the finetuner.
+        The real platform model selector is registered ``model_id`` / model config on the
+        finetuner side. The validator never receives this preprocessing channel and must not
+        use this property.
         """
         value = self.preprocessing_args.get("model_key")
         return str(value).strip() if value else None
@@ -160,16 +202,11 @@ def _normalize_device(value: str) -> str:
 
 
 def notify_done_callback_url(url: str | None, *, timeout: float = 10.0) -> bool:
-    """POST to a callback URL that may not have come from a constructed DimerEnv.
+    """POST to a callback URL that may not have come from a constructed env object.
 
-    Exists because the entrypoints must call back even when `DimerEnv.from_environ()` is
-    what failed: a malformed DIMER_PREPROCESSING_ARGS_JSON left `env` unbound, the result
-    document was written through the os.environ fallback, and the callback was skipped --
-    so the Workbench sat at "Validating..." until the sweeper marked the run OVERDUE.
-    DIMER's own docs name a missing callback as the cause of exactly that symptom.
-
-    Takes the raw URL rather than an env so the one code path that cannot rely on parsing
-    still has a way to signal completion.
+    Exists because the entrypoints must call back even when environment construction is what
+    failed. Takes the raw URL rather than an env so the one code path that cannot rely on
+    parsing still has a way to signal completion.
 
     Never raises and never logs the URL: it is a signed token.
     """
@@ -195,7 +232,9 @@ def notify_done_callback_url(url: str | None, *, timeout: float = 10.0) -> bool:
         return False
 
 
-def notify_done_callback(env: DimerEnv, *, timeout: float = 10.0) -> bool:
+def notify_done_callback(
+    env: DimerEnv | DimerValidationEnv, *, timeout: float = 10.0
+) -> bool:
     """POST to DIMER_DONE_CALLBACK. Returns True when the platform acknowledged.
 
     MUST be called from a `finally` block. A validator that writes result.json but never

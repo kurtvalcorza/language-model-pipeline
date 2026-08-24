@@ -32,8 +32,8 @@ def dimer_environ(monkeypatch, tmp_path):
 # -- env contract -------------------------------------------------------------
 
 
-def test_model_key_comes_from_preprocessing_args(dimer_environ):
-    """The only user-parameter channel proven to reach BOTH containers."""
+def test_finetuner_model_key_comes_from_preprocessing_args(dimer_environ):
+    """The broader finetuner env still accepts the legacy image-side model-key channel."""
     env = DimerEnv.from_environ()
     assert env.model_key == "qwen3-1.7b"
     assert env.hyperparameters["epochs"] == 3

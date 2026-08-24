@@ -22,20 +22,34 @@ Sources:
 
 ## 1. Injected environment
 
-Confirmed from Portal. Every variable the platform injects:
+The Portal documents one list. **The backend injects two different lists**, and reading the
+Portal's as though it were universal is what produced `COMPLIANCE.md` C-1. Verified against
+`dimer-backend` (`dimer/workbench/domain.py`) on three branches: `main` @ `7ff6124`,
+`testingjp1` @ `52e1d28`, `on-prem` @ `e06d1a9`.
 
-| Variable | Example | Purpose |
-|---|---|---|
-| `DIMER_DATASET_DIR` | `/data/dataset` | Mounted dataset location |
-| `DIMER_RESULT_PATH` | `/data/.../result.json` | Where to write `result.json` |
-| `DIMER_DONE_CALLBACK` | backend URL | POST here when finished |
-| `DIMER_PIPELINE_METADATA_JSON` | `{"taskType":"..."}` | Pipeline config |
-| `DIMER_TRAIN_DEVICE` | `cuda:0` or `cpu` | Training device |
-| `DIMER_HYPERPARAMETERS_JSON` | `{"epochs":10}` | User-selected hyperparameters |
-| `DIMER_PREPROCESSING_ARGS_JSON` | `{"image_size":224}` | Preprocessing settings |
-| `DIMER_SESSION_ID` | UUID | Workbench session |
-| `DIMER_RUN_ID` | UUID | This run |
-| `DIMER_OUTPUT_DIR` | `/data/output/...` | Where to save model weights |
+| Variable | Example | Purpose | Validator Job | Finetuner Job |
+|---|---|---|---|---|
+| `DIMER_DATASET_DIR` | `/data/dataset` | Dataset location | yes | yes |
+| `DIMER_RESULT_PATH` | `/data/.../result.json` | Where to write `result.json` | yes | yes |
+| `DIMER_DONE_CALLBACK` | backend URL | POST here when finished | yes | yes |
+| `DIMER_PIPELINE_METADATA_JSON` | `{"taskType":"..."}` | Pipeline config | **branch-dependent** | yes |
+| `DIMER_TRAIN_DEVICE` | `cuda:0` or `cpu` | Training device | no | yes |
+| `DIMER_HYPERPARAMETERS_JSON` | `{"epochs":10}` | User-selected hyperparameters | no | yes |
+| `DIMER_PREPROCESSING_ARGS_JSON` | `{"image_size":224}` | Preprocessing settings | no | yes |
+| `DIMER_MODEL_CONFIG_JSON` | registered entry | The resolved `fineTunableModels` entry | no | yes |
+| `DIMER_SESSION_ID` | UUID | Workbench session | no | yes |
+| `DIMER_RUN_ID` | UUID | This run | no | yes |
+| `DIMER_PIPELINE_ID` | UUID | The pipeline | no | yes |
+| `DIMER_OUTPUT_DIR` | `/data/output/...` | Where to save model weights | no | yes |
+| `DIMER_EXPECTED_ACCELERATOR` | `nvidia` / `cpu` | Accelerator the backend provisioned | no | yes |
+
+**A validator Job receives four variables at most, and three on some branches.**
+`DIMER_PIPELINE_METADATA_JSON` is absent on `main` and present on `testingjp1` and
+`on-prem`, so anything reading it needs a working `{}` default -- which is why
+`DimerValidationEnv.from_environ()` supplies one rather than requiring the variable.
+
+`lmpipeline.dimer` encodes this split as two parsed views, `DimerValidationEnv` and
+`DimerEnv`, so a validator cannot reach a finetuner-only channel by accident.
 
 `DIMER_TASK_TYPE` is **not** injected by the platform. It is baked into our images as
 `language_model_sft`, because DIMER's `Custom / Other` task resolves to generic platform
@@ -48,17 +62,24 @@ delivering the Pipeline Builder's *Base Model* field to a Job:
 
 - Portal's environment table has no Base Model entry; `DIMER_PIPELINE_METADATA_JSON` is
   documented only as `{"taskType":"..."}`.
-- Backend injects exactly three variables into validator Jobs (`domain.py:464`):
-  `DIMER_RESULT_PATH`, `DIMER_DATASET_DIR`, `DIMER_DONE_CALLBACK`.
+- Backend injects three variables into validator Jobs on `main` (`domain.py:464`):
+  `DIMER_RESULT_PATH`, `DIMER_DATASET_DIR`, `DIMER_DONE_CALLBACK`. `testingjp1` and
+  `on-prem` add `DIMER_PIPELINE_METADATA_JSON` and nothing else. No branch delivers Base
+  Model, and none delivers a model selection of any kind to a validator.
 - Shipped Mitra reads `DIMER_PIPELINE_METADATA_JSON` defensively (`{}` default) and uses it
   only for `taskType`/`supportedDatasetFormat`. It never needed Base Model because it bakes
   one model per container — a route unavailable to a repo shared across models.
 
-**Therefore:** `model_key` is the authoritative runtime selector, declared under
-`datasetPreprocessing` in the finetuner's `dimer-pipeline.json` and delivered via
-`DIMER_PREPROCESSING_ARGS_JSON`. DIMER's Base Model field is display/provenance metadata.
-When the platform does supply it, `ModelRegistry.reconcile_base_model` asserts agreement and
-fails on conflict rather than training the wrong model.
+**Therefore:** Base Model is display/provenance metadata. When the platform does supply it,
+`ModelRegistry.reconcile_base_model` asserts agreement and fails on conflict rather than
+training the wrong model.
+
+> **Superseded in part.** This section used to conclude that `model_key` in
+> `DIMER_PREPROCESSING_ARGS_JSON` is *the* authoritative runtime selector. The platform's own
+> selector is `model_id` in `DIMER_HYPERPARAMETERS_JSON`, resolved into
+> `DIMER_MODEL_CONFIG_JSON` (`COMPLIANCE.md` C-2, C-8), and that channel reaches the
+> finetuner only. The validator is model-agnostic by decision (C-1) and needs no selector at
+> all. See the supersession table for the full record.
 
 ### What to enter in Base Model for a GPU-tier registration
 

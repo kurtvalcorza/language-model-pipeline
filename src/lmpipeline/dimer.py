@@ -5,9 +5,12 @@ and unit-testable. Source verification against the backend established that the 
 the finetuner receive different environment-variable sets, so they intentionally use
 different parsed views:
 
-* ``DimerValidationEnv`` reads only the four variables delivered to validator Jobs:
-  ``DIMER_DATASET_DIR``, ``DIMER_RESULT_PATH``, ``DIMER_DONE_CALLBACK`` and
-  ``DIMER_PIPELINE_METADATA_JSON``.
+* ``DimerValidationEnv`` reads only the four ``DIMER_``-namespace variables delivered to
+  validator Jobs: ``DIMER_DATASET_DIR``, ``DIMER_RESULT_PATH``, ``DIMER_DONE_CALLBACK`` and
+  ``DIMER_PIPELINE_METADATA_JSON``. The last is absent on the backend's ``main`` branch, so
+  it defaults to ``{}`` rather than being required. An on-prem deployment additionally
+  injects S3 credentials and object keys; those belong to the storage layer, not to this
+  parsed view, and are deliberately not read here.
 * ``DimerEnv`` is the broader finetuner-facing view. The finetuner receives model selection
   and user parameters through channels the validator does not receive.
 

@@ -48,7 +48,11 @@ def do_sync(into: Path) -> int:
         PACKAGE_ROOT, target, ignore=shutil.ignore_patterns(*SKIP_DIRS, "*.pyc", "*.pyo")
     )
     digest = tree_hash(target)
-    (into / SHA_FILENAME).write_text(digest + "\n", encoding="utf-8")
+    # newline="" suppresses the platform translation write_text would otherwise apply. On
+    # Windows this file was being written with CRLF while `.gitattributes` normalizes it to
+    # LF on commit, so `git status` showed VENDOR_SHA permanently modified straight after a
+    # clean sync -- noise in exactly the gate whose whole job is to make drift visible.
+    (into / SHA_FILENAME).write_text(digest + "\n", encoding="utf-8", newline="")
     print(f"vendored lmpipeline -> {target}")
     print(f"{SHA_FILENAME} = {digest}")
     return 0

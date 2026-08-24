@@ -12,9 +12,9 @@ different parsed views:
   injects S3 credentials and object keys; those belong to the storage layer, not to this
   parsed view, and are deliberately not read here.
 * ``DimerEnv`` is the broader finetuner-facing view. The finetuner receives the registered
-  model selection through ``DIMER_HYPERPARAMETERS_JSON.model_id`` and
-  ``DIMER_MODEL_CONFIG_JSON``, plus training parameters and deployment metadata the validator
-  does not receive.
+  model selection through ``DIMER_HYPERPARAMETERS_JSON.model_id`` and the resolved entry in
+  ``DIMER_MODEL_CONFIG_JSON``, plus user parameters through channels the validator does not
+  receive.
 
 Keeping the two contracts distinct prevents a validator from accidentally depending on a
 finetuner-only variable and recreating COMPLIANCE.md C-1.
@@ -31,11 +31,14 @@ from urllib.parse import urlparse
 
 from .errors import Code, ConfigError
 
+# The callback must be a real HTTP(S) endpoint. urllib would otherwise happily open a
+# file:// or ftp:// URL.
 ALLOWED_CALLBACK_SCHEMES = frozenset({"http", "https"})
 
 # Env keys that may be echoed into diagnostics. DIMER_DONE_CALLBACK is deliberately absent:
-# it is a signed URL and must never reach logs or a result payload. DIMER_MODEL_CONFIG_JSON
-# is also absent: diagnostics expose its key NAMES, not the document values.
+# it is a signed URL and must never reach logs or a result payload (SECURITY.md). The model
+# config document is also excluded; diagnostics expose its KEY NAMES separately, never its
+# values, because future registration fields may contain deployment-sensitive metadata.
 LOGGABLE_ENV_KEYS = (
     "DIMER_DATASET_DIR",
     "DIMER_RESULT_PATH",
@@ -78,7 +81,12 @@ def _load_json_env(name: str) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class DimerValidationEnv:
-    """Source-verified environment delivered to a DIMER validator Job."""
+    """Source-verified environment delivered to a DIMER validator Job.
+
+    Do not add a field here merely because another Job type receives it. The absence of
+    preprocessing args and hyperparameters is part of the validator contract: the validator
+    therefore cannot know the user's selected model and must remain model-agnostic.
+    """
 
     dataset_dir: Path
     result_path: Path
@@ -86,7 +94,7 @@ class DimerValidationEnv:
     pipeline_metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_environ(cls) -> "DimerValidationEnv":
+    def from_environ(cls) -> DimerValidationEnv:
         """Parse only variables the backend actually injects into validator Jobs."""
         return cls(
             dataset_dir=Path(os.getenv("DIMER_DATASET_DIR", "/data/dataset")),
@@ -96,6 +104,7 @@ class DimerValidationEnv:
         )
 
     def diagnostics(self) -> dict[str, Any]:
+        """Validator env snapshot safe to embed in a result payload."""
         snapshot = {key: os.getenv(key, "") for key in VALIDATOR_LOGGABLE_ENV_KEYS}
         snapshot["DIMER_DONE_CALLBACK"] = REDACTED if self.done_callback else ""
         snapshot["pipelineMetadataKeys"] = sorted(self.pipeline_metadata)
@@ -121,8 +130,12 @@ class DimerEnv:
     model_config: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_environ(cls) -> "DimerEnv":
-        """Build from source-verified finetuner environment channels."""
+    def from_environ(cls) -> DimerEnv:
+        """Build from os.environ.
+
+        Call this inside the entrypoint's try/except so malformed platform input still
+        produces a structured result rather than an import-time crash.
+        """
         output_dir = os.getenv("DIMER_OUTPUT_DIR", "").strip()
         expected_accelerator = os.getenv("DIMER_EXPECTED_ACCELERATOR", "").strip().lower()
         return cls(
@@ -130,12 +143,13 @@ class DimerEnv:
             result_path=Path(os.getenv("DIMER_RESULT_PATH", "/data/output/result/result.json")),
             output_dir=Path(output_dir) if output_dir else None,
             done_callback=os.getenv("DIMER_DONE_CALLBACK", "").strip(),
-            # DIMER documents bare "0" as a real value here; torch.device("0") raises.
+            # DIMER documents bare "0" as a real value here; torch.device("0") raises
+            # "Invalid device string" — a named failure mode in the portal's Common Errors.
             train_device=_normalize_device(os.getenv("DIMER_TRAIN_DEVICE", "cuda:0")),
             session_id=os.getenv("DIMER_SESSION_ID", "").strip(),
             run_id=os.getenv("DIMER_RUN_ID", "").strip(),
-            # Custom / Other currently normalizes to generic platform metadata, so the
-            # container bakes its own task truth rather than trusting this value.
+            # Custom / Other resolves to generic platform metadata, so the container bakes
+            # its own truth. Never trust DIMER's resolved task type for this pipeline.
             task_type=os.getenv("DIMER_TASK_TYPE", "language_model_sft").strip(),
             expected_accelerator=expected_accelerator or None,
             pipeline_metadata=_load_json_env("DIMER_PIPELINE_METADATA_JSON"),
@@ -144,16 +158,19 @@ class DimerEnv:
             model_config=_load_json_env("DIMER_MODEL_CONFIG_JSON"),
         )
 
+    # -- derived selectors -----------------------------------------------------
+
     @property
     def model_key(self) -> str | None:
-        """Return DIMER's selected registry key, failing closed if selectors disagree.
+        """DIMER's selected registry key, with the legacy image-side key as fallback.
 
-        Backend source establishes ``DIMER_HYPERPARAMETERS_JSON.model_id`` as the real user
-        selection and ``DIMER_MODEL_CONFIG_JSON`` as the resolved registered entry. The old
-        image-side ``datasetPreprocessing.model_key`` is retained only as a compatibility
-        fallback for hand-run/legacy jobs. If more than one selector is supplied they must
-        name the same registry entry; silently choosing one would train a different model
-        from the one DIMER recorded for the run.
+        Source verification for C-2 established that the backend translates the user's
+        model selection to ``DIMER_HYPERPARAMETERS_JSON.model_id`` and also injects the
+        resolved ``fineTunableModels`` entry as ``DIMER_MODEL_CONFIG_JSON``. The old
+        ``datasetPreprocessing.model_key`` path survives for hand-run/legacy jobs only.
+
+        When more than one channel is present they MUST agree. Choosing one silently would
+        let the container train a different model from the one DIMER recorded for the run.
         """
         selectors = {
             "hyperparameters.model_id": self.hyperparameters.get("model_id"),
@@ -165,18 +182,16 @@ class DimerEnv:
             for name, value in selectors.items()
             if value is not None and str(value).strip()
         }
-        values = set(normalized.values())
-        if len(values) > 1:
+        if len(set(normalized.values())) > 1:
             raise ConfigError(
                 "DIMER model-selection channels disagree; refusing to choose a model.",
                 code=Code.CONFIG_SCHEMA_INVALID,
                 details={"selectors": sorted(normalized)},
             )
-        if not values:
-            return None
-        # Prefer the source-verified user selector, then the resolved model config, then the
-        # legacy preprocessing key. Agreement above makes the value identical when multiple
-        # channels are present.
+
+        # Prefer the real platform selector, then its resolved registration entry, then the
+        # compatibility fallback. The agreement check above means two present channels have
+        # exactly the same value.
         for name in (
             "hyperparameters.model_id",
             "modelConfig.id",
@@ -184,11 +199,14 @@ class DimerEnv:
         ):
             if name in normalized:
                 return normalized[name]
-        return None  # pragma: no cover - normalized/values already prove one exists
+        return None
 
     @property
     def base_model(self) -> str | None:
-        """DIMER's registered Base Model, when exposed; display/provenance only."""
+        """DIMER's registered Base Model, when the platform happens to expose it.
+
+        Display/provenance only. Used for cross-checking, never for selection.
+        """
         for candidate in ("baseModel", "base_model", "baseModelId"):
             value = self.pipeline_metadata.get(candidate)
             if value:
@@ -196,7 +214,11 @@ class DimerEnv:
         return None
 
     def diagnostics(self) -> dict[str, Any]:
-        """Allowlisted env snapshot safe to embed in a result payload."""
+        """Env snapshot safe to embed in a result payload.
+
+        Allowlisted by key. Never dump os.environ: DIMER_DONE_CALLBACK is a signed URL and
+        the container may also hold registry or Hub credentials.
+        """
         snapshot = {key: os.getenv(key, "") for key in LOGGABLE_ENV_KEYS}
         snapshot["DIMER_DONE_CALLBACK"] = REDACTED if self.done_callback else ""
         snapshot["pipelineMetadataKeys"] = sorted(self.pipeline_metadata)
@@ -207,6 +229,11 @@ class DimerEnv:
 
 
 def _normalize_device(value: str) -> str:
+    """Accept DIMER's device spellings, including a bare ordinal.
+
+    The portal documents `Invalid device string: '0'` as a common finetuner failure: DIMER
+    may pass "0" where torch expects "cuda:0".
+    """
     value = (value or "").strip()
     if not value:
         return "cuda:0"
@@ -216,23 +243,45 @@ def _normalize_device(value: str) -> str:
 
 
 def notify_done_callback_url(url: str | None, *, timeout: float = 10.0) -> bool:
-    """POST to a callback URL that may not have come from a constructed env object."""
+    """POST to a callback URL that may not have come from a constructed env object.
+
+    Exists because the entrypoints must call back even when environment construction is what
+    failed. Takes the raw URL rather than an env so the one code path that cannot rely on
+    parsing still has a way to signal completion.
+
+    Never raises and never logs the URL: it is a signed token.
+    """
     if not url:
         return False
+
+    # urllib registers file:// and ftp:// handlers by default, so an unexpected scheme
+    # would be followed silently. The shipped Mitra validator guards this the same way.
     if urlparse(url).scheme not in ALLOWED_CALLBACK_SCHEMES:
         return False
 
     try:
         import urllib.request
 
+        # Empty body, and deliberately NO Content-Type: declaring application/json with a
+        # zero-length body is invalid JSON and a body-parsing endpoint may reject it.
         request = urllib.request.Request(url, data=b"", method="POST")
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return 200 <= response.status < 300
     except Exception:
+        # Swallow deliberately: a failed callback must not mask the real result, and the
+        # exception text can embed the signed URL.
         return False
 
 
 def notify_done_callback(
     env: DimerEnv | DimerValidationEnv, *, timeout: float = 10.0
 ) -> bool:
+    """POST to DIMER_DONE_CALLBACK. Returns True when the platform acknowledged.
+
+    MUST be called from a `finally` block. A validator that writes result.json but never
+    calls back leaves the Workbench UI stuck at "Validating..." until the sweeper marks the
+    run OVERDUE.
+
+    Never raises and never logs the URL: it is a signed token.
+    """
     return notify_done_callback_url(env.done_callback, timeout=timeout)

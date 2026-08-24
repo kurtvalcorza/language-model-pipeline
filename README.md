@@ -26,7 +26,9 @@ src/lmpipeline/          the shared package both containers import
   datasets/normalize.py  schema detection and canonical normalization
   data/model-registry.yaml   THE registry — single copy, no root duplicate
 scripts/vendor_sync.py   vendor the package into consumers, with a drift gate
+scripts/build_registration.py  generate the DIMER fineTunableModels block from the registry
 DEPLOYMENT.md            the observed DIMER runtime contract, with evidence
+MODEL_REGISTRATION.md    how a registry entry becomes selectable in DIMER (C-2)
 DATASET_SPEC.md          the dataset contract
 TRAINING_SPEC.md         methods, loss masking, bounds, metrics, lifecycle
 ARTIFACT_SPEC.md         what a run publishes and what must hold first

@@ -98,6 +98,18 @@ jobs:
           print(f"model-registry.yaml validates ({len(document['models'])} entries)")
           PY
 
+      - name: The DIMER registration still resolves every approved model
+        # tests/test_registration.py covers build() and check() as functions; this runs the
+        # command a human actually runs before pasting into the Pipeline Builder, so an
+        # argparse or import-path break cannot pass the suite and fail in someone's hands.
+        #
+        # The failure this gates is silent and expensive: an approved model missing from
+        # `fineTunableModels` raises ValueError during Job CREATION, so there is no
+        # container, no result document and no callback -- nothing for a user to read.
+        run: |
+          python scripts/build_registration.py --check
+          python scripts/build_registration.py > /dev/null
+
   line-endings:
     # The vendor drift gate hashes file bytes, so a CRLF checkout and an LF checkout
     # disagree about a byte-identical tree. `.gitattributes` pins `* text=auto eol=lf` to

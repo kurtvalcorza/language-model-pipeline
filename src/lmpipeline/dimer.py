@@ -171,35 +171,53 @@ class DimerEnv:
 
         When more than one channel is present they MUST agree. Choosing one silently would
         let the container train a different model from the one DIMER recorded for the run.
+
+        Unlike every other member of this class, reading this property can RAISE. Read it
+        inside the entrypoint's structured-result ``try``/``except``, alongside
+        ``from_environ`` -- never from inside an exception handler, where the raise would
+        replace the failure being reported.
         """
-        selectors = {
+        # Insertion order IS precedence: the platform's real selector, then the resolved
+        # registration entry it produced, then the legacy image-side key. Keeping the two in
+        # one literal is what stops the precedence list and the channel list from drifting.
+        raw = {
             "hyperparameters.model_id": self.hyperparameters.get("model_id"),
             "modelConfig.id": self.model_config.get("id"),
             "preprocessing.model_key": self.preprocessing_args.get("model_key"),
         }
-        normalized = {
-            name: str(value).strip()
-            for name, value in selectors.items()
-            if value is not None and str(value).strip()
+
+        # A registry key is a string. `str()` would coerce a JSON `false` into "False" and
+        # report it one layer later as an unknown key, hiding a platform type defect behind
+        # MODEL_KEY_MISSING.
+        mistyped = {
+            name: type(value).__name__
+            for name, value in raw.items()
+            if value is not None and not isinstance(value, str)
         }
-        if len(set(normalized.values())) > 1:
+        if mistyped:
+            raise ConfigError(
+                "DIMER supplied a non-string model selector.",
+                code=Code.CONFIG_SCHEMA_INVALID,
+                details={"selectorTypes": dict(sorted(mistyped.items()))},
+            )
+
+        # Every surviving value is `str | None`: the type gate above rejected anything else.
+        selected = {
+            name: value.strip()
+            for name, value in raw.items()
+            if value is not None and value.strip()
+        }
+        if len(set(selected.values())) > 1:
+            # The values are approved registry keys, published in the Builder registration
+            # and echoed in the model card -- not secrets. Naming them is what lets an
+            # operator see WHICH channel is wrong from the result document alone, without
+            # shell access to a pod that has already exited.
             raise ConfigError(
                 "DIMER model-selection channels disagree; refusing to choose a model.",
                 code=Code.CONFIG_SCHEMA_INVALID,
-                details={"selectors": sorted(normalized)},
+                details={"selectors": dict(sorted(selected.items()))},
             )
-
-        # Prefer the real platform selector, then its resolved registration entry, then the
-        # compatibility fallback. The agreement check above means two present channels have
-        # exactly the same value.
-        for name in (
-            "hyperparameters.model_id",
-            "modelConfig.id",
-            "preprocessing.model_key",
-        ):
-            if name in normalized:
-                return normalized[name]
-        return None
+        return next(iter(selected.values()), None)
 
     @property
     def base_model(self) -> str | None:

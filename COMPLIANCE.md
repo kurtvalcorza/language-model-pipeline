@@ -153,11 +153,22 @@ the early-failure signal C-4 needs: the backend injects `DIMER_EXPECTED_ACCELERA
 `"nvidia"` or `"cpu"` from that same flag, so the finetuner can refuse before downloading
 weights instead of dying mid-training.
 
-**Status.** Repo-side complete: the block is generated, checked, and documented. Entering it
-needs Pipeline Builder access, and it cannot be exercised until #5 clears. `DimerEnv` does not
-yet parse `DIMER_MODEL_CONFIG_JSON` or `DIMER_EXPECTED_ACCELERATOR`; that belongs in a
-follow-up landing **after** the C-1 stack, since touching `src/lmpipeline` moves `VENDOR_SHA`
-and forces both consumers to re-vendor.
+**Status.** Repo-side complete, and the shared runtime now consumes the channels the
+registration produces. `DimerEnv` resolves the model from `DIMER_HYPERPARAMETERS_JSON.model_id`
+first, cross-checks it against the resolved `DIMER_MODEL_CONFIG_JSON.id`, keeps
+`datasetPreprocessing.model_key` only as a legacy fallback, and fails the Job closed with
+`CONFIG_SCHEMA_INVALID` when two channels disagree rather than silently choosing one.
+`DIMER_EXPECTED_ACCELERATOR` is parsed for the cheap C-4 preflight.
+
+Entering the block still needs Pipeline Builder access and cannot be exercised until #5
+clears. C-2 is therefore **implementation-complete and release-blocked**, which is not the
+same as done: nothing here has been observed against a real Job.
+
+Landing that runtime change moved `VENDOR_SHA`. **Both** consumers vendor `src/lmpipeline`,
+so both drift gates fail until they re-vendor — the finetuner because it reads the new
+fields, and `language-model-dataset-validator` because its `test_vendor_integrity.py` hashes
+the same tree even though it never constructs a `DimerEnv`. Re-vendoring only the finetuner
+leaves the validator red on a change it does not use.
 
 ### C-3 — The artifact cannot be exported **(P0)**
 

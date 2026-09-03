@@ -161,7 +161,15 @@ Registering the block needs Pipeline Builder access, which means it is Kurt's to
 cannot be exercised until `#5` clears — creating a `Custom / Other` pipeline currently fails
 on a `runtime_dataset_format` not-null constraint.
 
-`DimerEnv` does not yet parse `DIMER_MODEL_CONFIG_JSON` or `DIMER_EXPECTED_ACCELERATOR`. Both
-are real channels the shared package should expose, and both belong in a follow-up that lands
-**after** the C-1 stack, since changing `src/lmpipeline` moves `VENDOR_SHA` and forces both
-consumers to re-vendor.
+`DimerEnv` now parses both `DIMER_MODEL_CONFIG_JSON` and `DIMER_EXPECTED_ACCELERATOR`, so the
+chain at the top of this document is executable end to end rather than registered on one side
+and unread on the other. Selection precedence is `hyperparameters.model_id`, then
+`modelConfig.id`, then the legacy `datasetPreprocessing.model_key`; two channels that disagree
+fail the Job before any weight is downloaded, and the error names both the channels and their
+values, because a registry key is published in this very block and withholding it would only
+cost the operator the diagnosis. Diagnostics expose `modelConfigKeys` — key names — and never
+the registration's values, since fields added here later may carry deployment metadata.
+
+That change moved `VENDOR_SHA`, and **both** consumers vendor `src/lmpipeline`. The finetuner
+re-vendors because it reads the new fields; `language-model-dataset-validator` re-vendors
+because its drift gate hashes the same tree, not because it uses any of this.

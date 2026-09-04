@@ -11,8 +11,10 @@ different parsed views:
   it defaults to ``{}`` rather than being required. An on-prem deployment additionally
   injects S3 credentials and object keys; those belong to the storage layer, not to this
   parsed view, and are deliberately not read here.
-* ``DimerEnv`` is the broader finetuner-facing view. The finetuner receives model selection
-  and user parameters through channels the validator does not receive.
+* ``DimerEnv`` is the broader finetuner-facing view. The finetuner receives the registered
+  model selection through ``DIMER_HYPERPARAMETERS_JSON.model_id`` and the resolved entry in
+  ``DIMER_MODEL_CONFIG_JSON``, plus user parameters through channels the validator does not
+  receive.
 
 Keeping the two contracts distinct prevents a validator from accidentally depending on a
 finetuner-only variable and recreating COMPLIANCE.md C-1.
@@ -34,7 +36,9 @@ from .errors import Code, ConfigError
 ALLOWED_CALLBACK_SCHEMES = frozenset({"http", "https"})
 
 # Env keys that may be echoed into diagnostics. DIMER_DONE_CALLBACK is deliberately absent:
-# it is a signed URL and must never reach logs or a result payload (SECURITY.md).
+# it is a signed URL and must never reach logs or a result payload (SECURITY.md). The model
+# config document is also excluded; diagnostics expose its KEY NAMES separately, never its
+# values, because future registration fields may contain deployment-sensitive metadata.
 LOGGABLE_ENV_KEYS = (
     "DIMER_DATASET_DIR",
     "DIMER_RESULT_PATH",
@@ -43,6 +47,7 @@ LOGGABLE_ENV_KEYS = (
     "DIMER_SESSION_ID",
     "DIMER_RUN_ID",
     "DIMER_TASK_TYPE",
+    "DIMER_EXPECTED_ACCELERATOR",
 )
 VALIDATOR_LOGGABLE_ENV_KEYS = (
     "DIMER_DATASET_DIR",
@@ -118,9 +123,11 @@ class DimerEnv:
     session_id: str
     run_id: str
     task_type: str
+    expected_accelerator: str | None = None
     pipeline_metadata: dict[str, Any] = field(default_factory=dict)
     preprocessing_args: dict[str, Any] = field(default_factory=dict)
     hyperparameters: dict[str, Any] = field(default_factory=dict)
+    model_config: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_environ(cls) -> DimerEnv:
@@ -130,6 +137,7 @@ class DimerEnv:
         produces a structured result rather than an import-time crash.
         """
         output_dir = os.getenv("DIMER_OUTPUT_DIR", "").strip()
+        expected_accelerator = os.getenv("DIMER_EXPECTED_ACCELERATOR", "").strip().lower()
         return cls(
             dataset_dir=Path(os.getenv("DIMER_DATASET_DIR", "/data/dataset")),
             result_path=Path(os.getenv("DIMER_RESULT_PATH", "/data/output/result/result.json")),
@@ -143,23 +151,73 @@ class DimerEnv:
             # Custom / Other resolves to generic platform metadata, so the container bakes
             # its own truth. Never trust DIMER's resolved task type for this pipeline.
             task_type=os.getenv("DIMER_TASK_TYPE", "language_model_sft").strip(),
+            expected_accelerator=expected_accelerator or None,
             pipeline_metadata=_load_json_env("DIMER_PIPELINE_METADATA_JSON"),
             preprocessing_args=_load_json_env("DIMER_PREPROCESSING_ARGS_JSON"),
             hyperparameters=_load_json_env("DIMER_HYPERPARAMETERS_JSON"),
+            model_config=_load_json_env("DIMER_MODEL_CONFIG_JSON"),
         )
 
     # -- derived selectors -----------------------------------------------------
 
     @property
     def model_key(self) -> str | None:
-        """Legacy image-side model key when supplied to the finetuner.
+        """DIMER's selected registry key, with the legacy image-side key as fallback.
 
-        The real platform model selector is registered ``model_id`` / model config on the
-        finetuner side. The validator never receives this preprocessing channel and must not
-        use this property.
+        Source verification for C-2 established that the backend translates the user's
+        model selection to ``DIMER_HYPERPARAMETERS_JSON.model_id`` and also injects the
+        resolved ``fineTunableModels`` entry as ``DIMER_MODEL_CONFIG_JSON``. The old
+        ``datasetPreprocessing.model_key`` path survives for hand-run/legacy jobs only.
+
+        When more than one channel is present they MUST agree. Choosing one silently would
+        let the container train a different model from the one DIMER recorded for the run.
+
+        Unlike every other member of this class, reading this property can RAISE. Read it
+        inside the entrypoint's structured-result ``try``/``except``, alongside
+        ``from_environ`` -- never from inside an exception handler, where the raise would
+        replace the failure being reported.
         """
-        value = self.preprocessing_args.get("model_key")
-        return str(value).strip() if value else None
+        # Insertion order IS precedence: the platform's real selector, then the resolved
+        # registration entry it produced, then the legacy image-side key. Keeping the two in
+        # one literal is what stops the precedence list and the channel list from drifting.
+        raw = {
+            "hyperparameters.model_id": self.hyperparameters.get("model_id"),
+            "modelConfig.id": self.model_config.get("id"),
+            "preprocessing.model_key": self.preprocessing_args.get("model_key"),
+        }
+
+        # A registry key is a string. `str()` would coerce a JSON `false` into "False" and
+        # report it one layer later as an unknown key, hiding a platform type defect behind
+        # MODEL_KEY_MISSING.
+        mistyped = {
+            name: type(value).__name__
+            for name, value in raw.items()
+            if value is not None and not isinstance(value, str)
+        }
+        if mistyped:
+            raise ConfigError(
+                "DIMER supplied a non-string model selector.",
+                code=Code.CONFIG_SCHEMA_INVALID,
+                details={"selectorTypes": dict(sorted(mistyped.items()))},
+            )
+
+        # Every surviving value is `str | None`: the type gate above rejected anything else.
+        selected = {
+            name: value.strip()
+            for name, value in raw.items()
+            if value is not None and value.strip()
+        }
+        if len(set(selected.values())) > 1:
+            # The values are approved registry keys, published in the Builder registration
+            # and echoed in the model card -- not secrets. Naming them is what lets an
+            # operator see WHICH channel is wrong from the result document alone, without
+            # shell access to a pod that has already exited.
+            raise ConfigError(
+                "DIMER model-selection channels disagree; refusing to choose a model.",
+                code=Code.CONFIG_SCHEMA_INVALID,
+                details={"selectors": dict(sorted(selected.items()))},
+            )
+        return next(iter(selected.values()), None)
 
     @property
     def base_model(self) -> str | None:
@@ -184,6 +242,7 @@ class DimerEnv:
         snapshot["pipelineMetadataKeys"] = sorted(self.pipeline_metadata)
         snapshot["preprocessingArgKeys"] = sorted(self.preprocessing_args)
         snapshot["hyperparameterKeys"] = sorted(self.hyperparameters)
+        snapshot["modelConfigKeys"] = sorted(self.model_config)
         return snapshot
 
 

@@ -87,10 +87,15 @@ def extract_label(
     return label_map.get(normalized, null_label)
 
 
-def _f1_for_label(references: Sequence[str], predictions: Sequence[str], label: str) -> float:
-    tp = sum(ref == label and pred == label for ref, pred in zip(references, predictions, strict=True))
-    fp = sum(ref != label and pred == label for ref, pred in zip(references, predictions, strict=True))
-    fn = sum(ref == label and pred != label for ref, pred in zip(references, predictions, strict=True))
+def _f1_for_label(
+    references: Sequence[str], predictions: Sequence[str], label: str
+) -> float:
+    pairs = zip(references, predictions, strict=True)
+    tp = sum(ref == label and pred == label for ref, pred in pairs)
+    pairs = zip(references, predictions, strict=True)
+    fp = sum(ref != label and pred == label for ref, pred in pairs)
+    pairs = zip(references, predictions, strict=True)
+    fn = sum(ref == label and pred != label for ref, pred in pairs)
     denominator = 2 * tp + fp + fn
     return 0.0 if denominator == 0 else (2 * tp) / denominator
 
@@ -152,7 +157,10 @@ def score_responses(
     null_weighted_f1 = reference_macro_f1 * (1 - null_count / len(predictions))
     normalized_accuracy = _normalized_accuracy(balanced_accuracy, len(reference_labels))
 
-    individual = [int(reference == prediction) for reference, prediction in zip(refs, predictions, strict=True)]
+    individual = [
+        int(reference == prediction)
+        for reference, prediction in zip(refs, predictions, strict=True)
+    ]
 
     return {
         "metrics": {

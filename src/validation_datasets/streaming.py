@@ -4,10 +4,11 @@ The existing selector intentionally materializes its input so it can preserve du
 occurrence semantics and emit rows in source order. That is appropriate for small Dolly/UNER
 sources, but not for a 908k-row / multi-gigabyte SEA-Instruct split.
 
-Large-source selection uses an explicit stable source identity (SEA-Instruct documents
-``conversations_id`` as unique) plus a digest of the canonical selection fields. That removes
-the need to remember every fingerprint seen during the scan: only the best ``count`` source
-rows are retained, so memory is O(profile size).
+Large-source selection therefore uses a different, explicit identity policy: a stable source
+ID (SEA-Instruct documents ``conversations_id`` as unique) plus a digest of the meaningful
+selection fields. Only the best ``count`` rows are retained, so memory is O(profile size).
+The profile manifest must name this identity policy rather than implying it used the small-
+source occurrence-counter algorithm.
 """
 
 from __future__ import annotations

@@ -32,7 +32,7 @@ def _identity(content_digest: str, occurrence: int) -> str:
 
 
 def _rank(identity: str, *, salt: str) -> str:
-    return hashlib.sha256(f"{salt}:{identity}".encode("utf-8")).hexdigest()
+    return hashlib.sha256(f"{salt}:{identity}".encode()).hexdigest()
 
 
 def select_bounded(
@@ -94,4 +94,4 @@ def select_bounded(
 def identity_digest(selected: Iterable[BoundedSelection]) -> str:
     """Order-independent digest proving which stable source identities were selected."""
     identities = sorted(item.identity for item in selected)
-    return hashlib.sha256("\n".join(identities).encode("utf-8")).hexdigest()
+    return hashlib.sha256("\n".join(identities).encode()).hexdigest()

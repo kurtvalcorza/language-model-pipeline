@@ -65,9 +65,11 @@ def test_validator_is_code_cell_scoped():
     assert "RUN_NEW_PROMPT_INFERENCE" in code
 
 
-def test_smollm3_is_default_and_llama_is_selectable():
+def test_qwen06b_is_default_and_llama_is_selectable():
     code = code_text(load_notebook(MAIN))
-    assert 'BASE_MODEL_KEY = "smollm3-3b"' in code
+    assert 'BASE_MODEL_KEY = "qwen3-0.6b"' in code
+    assert '"qwen3-0.6b"' in code
+    assert '"smollm3-3b"' in code
     assert '"llama-3.2-3b-instruct"' in code
     assert '"meta-llama/Llama-3.2-3B-Instruct"' in code
 

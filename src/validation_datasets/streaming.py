@@ -1,15 +1,13 @@
 """Bounded deterministic selection for very large acceptance sources.
 
-The existing selector intentionally materializes its input so it can emit rows in source
-order. That is appropriate for the small Dolly/UNER acceptance sources, but not for a
-908k-row / multi-gigabyte SEA-Instruct split. This module keeps only the best ``count`` rows
-by the same stable content-hash ranking while scanning an arbitrary iterable once.
+The existing selector intentionally materializes its input so it can preserve duplicate-row
+occurrence semantics and emit rows in source order. That is appropriate for small Dolly/UNER
+sources, but not for a 908k-row / multi-gigabyte SEA-Instruct split.
 
-Memory is O(profile size + number of distinct content fingerprints). The selected *rows* are
-bounded to ``count``; a compact digest->occurrence counter is retained across the scan so
-exact duplicate source rows keep the same deterministic identity semantics as the existing
-selector. This distinction matters for very large sources and is stated explicitly rather
-than calling the whole algorithm O(count).
+Large-source selection uses an explicit stable source identity (SEA-Instruct documents
+``conversations_id`` as unique) plus a digest of the canonical selection fields. That removes
+the need to remember every fingerprint seen during the scan: only the best ``count`` source
+rows are retained, so memory is O(profile size).
 """
 
 from __future__ import annotations
@@ -23,6 +21,10 @@ from typing import Any
 from .subset import content_hash
 
 
+class StreamingSelectionError(ValueError):
+    """The large source lacks the stable identity required for bounded selection."""
+
+
 @dataclass(frozen=True)
 class BoundedSelection:
     """One selected source row plus deterministic identity/rank evidence."""
@@ -33,12 +35,28 @@ class BoundedSelection:
     row: dict[str, Any]
 
 
-def _identity(content_digest: str, occurrence: int) -> str:
-    return f"{content_digest}:{occurrence}"
-
-
 def _rank(identity: str, *, salt: str) -> str:
     return hashlib.sha256(f"{salt}:{identity}".encode()).hexdigest()
+
+
+def _stable_identity(
+    row: dict[str, Any],
+    *,
+    identity_field: str,
+    key_fields: tuple[str, ...],
+    source_index: int,
+) -> str:
+    source_identity = row.get(identity_field)
+    if not isinstance(source_identity, str) or not source_identity.strip():
+        raise StreamingSelectionError(
+            f"row {source_index}: stable identity field {identity_field!r} must be a "
+            "non-empty string"
+        )
+    # Including meaningful content makes an upstream ID collision deterministic without a
+    # global duplicate table: same-ID/different-content rows rank independently; exact
+    # duplicate rows remain byte-identical even if their source positions are swapped.
+    digest = content_hash(row, key_fields)
+    return f"{source_identity}:{digest}"
 
 
 def select_bounded(
@@ -46,18 +64,15 @@ def select_bounded(
     *,
     count: int,
     salt: str,
+    identity_field: str,
     key_fields: tuple[str, ...],
 ) -> list[BoundedSelection]:
-    """Select the ``count`` smallest stable ranks in one pass with bounded row storage.
+    """Select the ``count`` smallest stable ranks in one pass with O(count) memory.
 
-    Duplicate source rows remain distinct through an occurrence counter, matching the
-    existing acceptance-suite policy. Occurrence numbers for identical content are stable as
-    a multiset regardless of where those identical rows appear, so reordering the source does
-    not change which *content occurrences* win.
-
-    Output is rank-ordered rather than source-index-ordered. That is deliberate: source
-    indices can change when upstream serialization order changes, while rank/identity are
-    content-derived and therefore give a byte-stable order for the generated profile.
+    Output is rank-ordered rather than source-index-ordered. Source indices can change when
+    upstream serialization order changes, while the identity/rank are derived only from a
+    pinned source ID and meaningful row content. Reordering therefore cannot change either
+    the selected content or generated output order.
     """
     if count <= 0:
         raise ValueError("count must be a positive integer")
@@ -65,15 +80,14 @@ def select_bounded(
     # Python provides a min-heap. Store negative rank integers so heap[0] is the currently
     # WORST (largest) retained rank, which can be replaced whenever a better row arrives.
     heap: list[tuple[int, str, int, dict[str, Any]]] = []
-    # Exact duplicate semantics require one compact integer per distinct content digest.
-    # This is much smaller than retaining source rows but is not O(count) in the worst case.
-    seen: dict[str, int] = {}
 
     for source_index, row in enumerate(rows):
-        digest = content_hash(row, key_fields)
-        occurrence = seen.get(digest, 0)
-        seen[digest] = occurrence + 1
-        identity = _identity(digest, occurrence)
+        identity = _stable_identity(
+            row,
+            identity_field=identity_field,
+            key_fields=key_fields,
+            source_index=source_index,
+        )
         rank = _rank(identity, salt=salt)
         rank_int = int(rank, 16)
         candidate = (-rank_int, identity, source_index, row)

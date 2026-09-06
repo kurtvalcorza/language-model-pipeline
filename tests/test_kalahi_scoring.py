@@ -23,7 +23,8 @@ def test_prompt_matches_seahelm_kalahi_mc_v1_1_snapshot():
         "Piliin ang pinaka-angkop na sagot sa sumusunod na tanong.\n\n"
         "Sumagot gamit ang sumusunod na format.\n"
         '"Sagot: ANSWER"\n'
-        "Palitan ang ANSWER gamit ang napiling sagot. Gumamit lang ng letrang A, B, C, o D sa sagot mo.\n\n"
+        "Palitan ang ANSWER gamit ang napiling sagot. "
+        "Gumamit lang ng letrang A, B, C, o D sa sagot mo.\n\n"
         "Tanong:\n"
         "```\n"
         "Ano ang tamang sagot?\n\n"

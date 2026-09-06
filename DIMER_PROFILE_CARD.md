@@ -2,13 +2,14 @@
 
 [![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Qwen%2FQwen3--0.6B-FFD21E?style=flat&logo=huggingface&logoColor=black)](https://huggingface.co/Qwen/Qwen3-0.6B)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+[![GitHub Repository](https://img.shields.io/badge/GitHub-language--model--pipeline-181717?style=flat&logo=github&logoColor=white)](https://github.com/kurtvalcorza/language-model-pipeline)
 [![Open Fine-Tuning Tutorial In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb)
 [![Open Artifact Inference In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb)
-[![GitHub Repository](https://img.shields.io/badge/GitHub-language--model--pipeline-181717?style=flat&logo=github&logoColor=white)](https://github.com/kurtvalcorza/language-model-pipeline)
 
 ---
 
-## Executive Summary & Description
+## Description
 
 This repository profile card provides the complete specification for **Qwen3-0.6B** and the accompanying **Language Model Supervised Fine-Tuning (SFT) and Inference Pipeline**.
 
@@ -57,8 +58,8 @@ weights/
 - **Qwen3-0.6B Model Card:** [`language-model-pipeline/weights/qwen3-0.6b/README.md`](https://github.com/kurtvalcorza/language-model-pipeline/blob/main/weights/qwen3-0.6b/README.md)
 - **Cryptographic Manifest:** [`language-model-pipeline/weights/qwen3-0.6b/dimer-base-manifest.json`](https://github.com/kurtvalcorza/language-model-pipeline/blob/main/weights/qwen3-0.6b/dimer-base-manifest.json)
 
-### DIMER Architecture & Git Tracking Strategy
-In the DIMER workbench ecosystem:
+### Git Tracking
+
 1. **Large Binary Weights (`model.safetensors`):** The ~1.41 GiB weight file is excluded from Git via `.gitignore` (`weights/**/*.safetensors`) and uploaded directly to DIMER as a model asset or downloaded using `scripts/fetch_weights.py`.
 2. **Configuration & Tokenizers:** All accompanying configuration files (`config.json`, `generation_config.json`), BPE tokenizer files (`tokenizer.json`, `vocab.json`, `merges.txt`), and the cryptographic manifest are tracked in GitHub under [`weights/qwen3-0.6b/`](https://github.com/kurtvalcorza/language-model-pipeline/tree/main/weights/qwen3-0.6b). This allows build pipelines and offline Docker containers to initialize the model structure and tokenizers without external network access.
 

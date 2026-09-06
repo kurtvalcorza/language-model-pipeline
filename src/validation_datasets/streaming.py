@@ -4,6 +4,12 @@ The existing selector intentionally materializes its input so it can emit rows i
 order. That is appropriate for the small Dolly/UNER acceptance sources, but not for a
 908k-row / multi-gigabyte SEA-Instruct split. This module keeps only the best ``count`` rows
 by the same stable content-hash ranking while scanning an arbitrary iterable once.
+
+Memory is O(profile size + number of distinct content fingerprints). The selected *rows* are
+bounded to ``count``; a compact digest->occurrence counter is retained across the scan so
+exact duplicate source rows keep the same deterministic identity semantics as the existing
+selector. This distinction matters for very large sources and is stated explicitly rather
+than calling the whole algorithm O(count).
 """
 
 from __future__ import annotations
@@ -42,7 +48,7 @@ def select_bounded(
     salt: str,
     key_fields: tuple[str, ...],
 ) -> list[BoundedSelection]:
-    """Select the ``count`` smallest stable ranks in one pass with O(count) row memory.
+    """Select the ``count`` smallest stable ranks in one pass with bounded row storage.
 
     Duplicate source rows remain distinct through an occurrence counter, matching the
     existing acceptance-suite policy. Occurrence numbers for identical content are stable as
@@ -59,6 +65,8 @@ def select_bounded(
     # Python provides a min-heap. Store negative rank integers so heap[0] is the currently
     # WORST (largest) retained rank, which can be replaced whenever a better row arrives.
     heap: list[tuple[int, str, int, dict[str, Any]]] = []
+    # Exact duplicate semantics require one compact integer per distinct content digest.
+    # This is much smaller than retaining source rows but is not O(count) in the worst case.
     seen: dict[str, int] = {}
 
     for source_index, row in enumerate(rows):

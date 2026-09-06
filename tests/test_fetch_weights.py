@@ -258,3 +258,177 @@ def test_cli_verify_only(tmp_path: Path, capsys):
     assert ret == 0
     captured = capsys.readouterr()
     assert "is VALID" in captured.out
+
+
+def test_network_free_error_paths_without_huggingface_hub(monkeypatch, capsys):
+    """Ensure all pre-download CLI validations succeed without importing huggingface_hub."""
+    monkeypatch.setitem(sys.modules, "huggingface_hub", None)
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+
+    # 1. Unknown model check
+    assert main(["--model", "unknown-xyz-model"]) == 1
+    out, err = capsys.readouterr()
+    assert "Unknown model_key 'unknown-xyz-model'" in err
+
+    # 2. Disabled model check
+    assert main(["--model", "llama-3.2-3b-instruct"]) == 1
+    out, err = capsys.readouterr()
+    assert "is disabled in the registry" in err
+
+    # 3. Gated model check without token
+    assert main(["--model", "llama-3.2-3b-instruct", "--force"]) == 1
+    out, err = capsys.readouterr()
+    assert "is gated on Hugging Face" in err
+
+    # 4. Attempted dry-run reports friendly import error without crash
+    assert main(["--model", "qwen3-0.6b", "--dry-run"]) == 1
+    out, err = capsys.readouterr()
+    assert "'huggingface_hub' is required for dry-run inspection" in err
+
+
+def test_default_destination_resolves_to_model_subfolder_with_sibling_content(
+    tmp_path: Path, monkeypatch, capsys
+):
+    """Ensure default destination is weights/<model-key>/ and does not mix with sibling content."""
+    weights_root = tmp_path / "weights"
+    weights_root.mkdir()
+
+    # Pre-existing sibling content in weights root
+    (weights_root / "README.md").write_text("# Root Readme", encoding="utf-8")
+    sibling_dir = weights_root / "other_model"
+    sibling_dir.mkdir()
+    (sibling_dir / "sibling.bin").write_bytes(b"sibling data")
+
+    # Target model directory
+    model_dir = weights_root / DEFAULT_MODEL_KEY
+    model_dir.mkdir()
+    (model_dir / "config.json").write_text("{}", encoding="utf-8")
+    (model_dir / "model.safetensors").write_bytes(b"weights")
+
+    manifest = generate_manifest(
+        model_dir=model_dir,
+        model_key=DEFAULT_MODEL_KEY,
+        model_id="Qwen/Qwen3-0.6B",
+        revision="c1899de289a04d12100db370d81485cdf75e47ca",
+    )
+    (model_dir / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    # Manifest must not contain sibling files from weights_root
+    paths_in_manifest = {f["path"] for f in manifest["files"]}
+    assert "README.md" not in paths_in_manifest
+    assert "other_model/sibling.bin" not in paths_in_manifest
+    assert "config.json" in paths_in_manifest
+    assert "model.safetensors" in paths_in_manifest
+
+    # CLI verify-only with no --dest should resolve to weights/<default_model> and pass cleanly
+    import scripts.fetch_weights as fw
+    monkeypatch.setattr(fw, "DEFAULT_DEST_DIR", weights_root)
+
+    ret = main(["--verify-only"])
+    assert ret == 0
+    captured = capsys.readouterr()
+    assert "is VALID" in captured.out
+
+
+def test_verify_snapshot_rejects_unsafe_paths(tmp_path: Path):
+    """Ensure verify_snapshot rejects backslashes, drive prefixes, traversal, and UNC paths."""
+    model_dir = tmp_path / "unsafe_test_model"
+    model_dir.mkdir()
+    (model_dir / "model.safetensors").write_bytes(b"data")
+
+    fake_hash = "0" * 64
+    valid_hash = sha256_file(model_dir / "model.safetensors")
+
+    unsafe_paths = [
+        "../outside.safetensors",
+        r"..\outside.safetensors",
+        "/etc/passwd",
+        r"\server\share\model.safetensors",
+        r"\\server\share\model.safetensors",
+        r"C:\outside\model.safetensors",
+        "C:/outside/model.safetensors",
+        "D:foo.safetensors",
+        r"sub\file.safetensors",
+        ".",
+        "",
+    ]
+
+    for bad_path in unsafe_paths:
+        manifest = {
+            "format": MANIFEST_FORMAT,
+            "formatVersion": MANIFEST_FORMAT_VERSION,
+            "modelKey": "qwen3-0.6b",
+            "modelId": "Qwen/Qwen3-0.6B",
+            "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+            "files": [
+                {"path": "model.safetensors", "bytes": 4, "sha256": valid_hash},
+                {"path": bad_path, "bytes": 100, "sha256": fake_hash},
+            ],
+            "totalBytes": 104,
+        }
+        (model_dir / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        valid, errors = verify_snapshot(model_dir)
+        assert valid is False, f"Expected invalid for path: {bad_path!r}"
+        assert any(
+            (
+                "Unsafe path" in e
+                or "Path escape" in e
+                or "Invalid or empty path" in e
+                or "references snapshot root" in e
+            )
+            for e in errors
+        ), f"Errors for {bad_path!r} did not contain expected safety message: {errors}"
+
+
+def test_verify_snapshot_rejects_symlinks(tmp_path: Path):
+    """Ensure symlinks are rejected during snapshot verification and manifest generation."""
+    import os
+
+    import pytest
+
+    model_dir = tmp_path / "symlink_test_model"
+    model_dir.mkdir()
+    real_file = tmp_path / "real_file.txt"
+    real_file.write_bytes(b"real content")
+    (model_dir / "model.safetensors").write_bytes(b"data")
+
+    link_path = model_dir / "linked.safetensors"
+    try:
+        os.symlink(real_file, link_path)
+    except OSError:
+        pytest.skip("Creating symlinks requires special privileges on Windows")
+
+    # Manifest generation must reject symlink
+    with pytest.raises(ValueError, match="Symlinks not allowed"):
+        generate_manifest(
+            model_dir=model_dir,
+            model_key="qwen3-0.6b",
+            model_id="Qwen/Qwen3-0.6B",
+            revision="c1899de289a04d12100db370d81485cdf75e47ca",
+        )
+
+    # Verification must also reject symlink in manifest
+    manifest = {
+        "format": MANIFEST_FORMAT,
+        "formatVersion": MANIFEST_FORMAT_VERSION,
+        "modelKey": "qwen3-0.6b",
+        "modelId": "Qwen/Qwen3-0.6B",
+        "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+        "files": [
+            {
+                "path": "model.safetensors",
+                "bytes": 4,
+                "sha256": sha256_file(model_dir / "model.safetensors"),
+            },
+            {
+                "path": "linked.safetensors",
+                "bytes": len(b"real content"),
+                "sha256": sha256_file(real_file),
+            },
+        ],
+        "totalBytes": 4 + len(b"real content"),
+    }
+    (model_dir / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    valid, errors = verify_snapshot(model_dir)
+    assert valid is False
+    assert any("Symlinks not allowed" in e for e in errors)

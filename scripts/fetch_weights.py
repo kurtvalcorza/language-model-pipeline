@@ -8,23 +8,23 @@ Usage:
     # List all registered base models:
     python scripts/fetch_weights.py --list
 
-    # Download default model (qwen3-1.7b) directly to weights/:
+    # Download default model (qwen3-0.6b) to weights/qwen3-0.6b/:
     python scripts/fetch_weights.py
 
-    # Download a specific model to weights/:
+    # Download a specific model to weights/<model-key>/:
     python scripts/fetch_weights.py --model smollm3-3b
 
-    # Download to a specific destination folder:
-    python scripts/fetch_weights.py --model qwen3-1.7b --dest weights/qwen3-1.7b
+    # Download to an explicit custom destination folder:
+    python scripts/fetch_weights.py --model qwen3-0.6b --dest custom/path
 
     # Dry-run (check files and total download size without downloading):
-    python scripts/fetch_weights.py --model qwen3-1.7b --dry-run
+    python scripts/fetch_weights.py --dry-run
 
     # Verify existing weights against dimer-base-manifest.json:
-    python scripts/fetch_weights.py --verify-only --dest weights/
+    python scripts/fetch_weights.py --verify-only
 
     # Download and package into a DIMER ZIP archive:
-    python scripts/fetch_weights.py --model qwen3-1.7b --dest weights/ --zip dimer-base-model.zip
+    python scripts/fetch_weights.py --model qwen3-0.6b --zip dimer-base-model.zip
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ import os
 import shutil
 import sys
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -198,6 +198,8 @@ def generate_manifest(
 
     for p in sorted(model_dir.rglob("*")):
         if p.is_file() and p.name != MANIFEST_NAME:
+            if p.is_symlink():
+                raise ValueError(f"Symlinks not allowed in manifest generation: {p}")
             rel_path = p.relative_to(model_dir).as_posix()
             size = p.stat().st_size
             digest = sha256_file(p)
@@ -266,13 +268,48 @@ def verify_snapshot(
     listed_files: set[str] = set()
     calculated_size = 0
 
+    resolved_root = model_dir.resolve()
     for item in manifest.get("files", []):
         rel_posix = item.get("path", "")
-        if not rel_posix or ".." in rel_posix or rel_posix.startswith("/"):
-            errors.append(f"Unsafe path in manifest: {rel_posix!r}")
+        if not isinstance(rel_posix, str) or not rel_posix:
+            errors.append(f"Invalid or empty path in manifest: {rel_posix!r}")
             continue
 
-        target_file = model_dir / Path(*rel_posix.split("/"))
+        # Reject backslashes, drive prefixes, and UNC paths
+        if "\\" in rel_posix or ":" in rel_posix:
+            errors.append(
+                f"Unsafe path in manifest (contains backslash or drive prefix): {rel_posix!r}"
+            )
+            continue
+
+        pure = PurePosixPath(rel_posix)
+        if pure.is_absolute() or ".." in pure.parts:
+            errors.append(f"Unsafe path in manifest (absolute or traversal): {rel_posix!r}")
+            continue
+
+        raw_candidate = resolved_root / Path(*pure.parts)
+        try:
+            target_file = raw_candidate.resolve()
+        except Exception as exc:
+            errors.append(f"Failed to resolve path {rel_posix!r}: {exc}")
+            continue
+
+        # Strict containment check: resolved target must be strictly inside resolved_root
+        try:
+            target_file.relative_to(resolved_root)
+        except ValueError:
+            errors.append(f"Path escape in manifest: {rel_posix!r}")
+            continue
+
+        if target_file == resolved_root:
+            errors.append(f"Path references snapshot root: {rel_posix!r}")
+            continue
+
+        # Reject symlinks
+        if raw_candidate.is_symlink() or target_file.is_symlink():
+            errors.append(f"Symlinks not allowed in manifest: {rel_posix!r}")
+            continue
+
         if not target_file.is_file():
             errors.append(f"Missing file listed in manifest: {rel_posix}")
             continue
@@ -296,8 +333,8 @@ def verify_snapshot(
 
     # Check for unlisted files on disk
     actual_files = {
-        p.relative_to(model_dir).as_posix()
-        for p in model_dir.rglob("*")
+        p.relative_to(resolved_root).as_posix()
+        for p in resolved_root.rglob("*")
         if p.is_file() and p.name != MANIFEST_NAME
     }
 
@@ -325,6 +362,8 @@ def package_dimer_zip(model_dir: Path, output_zip: Path) -> str:
     with zipfile.ZipFile(output_zip, "w", compression=zipfile.ZIP_STORED) as z:
         for p in sorted(model_dir.rglob("*")):
             if p.is_file() and p.resolve() != output_zip:
+                if p.is_symlink():
+                    raise ValueError(f"Symlinks not allowed in ZIP archive: {p}")
                 z.write(p, p.relative_to(model_dir).as_posix())
 
     return sha256_file(output_zip)
@@ -355,7 +394,7 @@ def dry_run_model(
 
 def fetch_model_weights(
     model_key: str = DEFAULT_MODEL_KEY,
-    dest_dir: Path = DEFAULT_DEST_DIR,
+    dest_dir: Path | None = None,
     *,
     token: str | None = None,
     write_manifest: bool = True,
@@ -366,8 +405,6 @@ def fetch_model_weights(
     registry_path: Path | None = None,
 ) -> int:
     """Download base model weights and generate snapshot manifest."""
-    from huggingface_hub import snapshot_download
-
     registry, specs = get_model_specs(registry_path)
 
     if model_key not in registry._entries:
@@ -414,7 +451,20 @@ def fetch_model_weights(
         )
         return 1
 
+    if dest_dir is None:
+        dest_dir = DEFAULT_DEST_DIR / model_key
+    dest_dir = dest_dir.resolve()
+
     if dry_run:
+        try:
+            from huggingface_hub import HfApi  # noqa: F401
+        except ImportError:
+            print(
+                "Error: 'huggingface_hub' is required for dry-run inspection.\n"
+                "Install it via: pip install huggingface-hub",
+                file=sys.stderr,
+            )
+            return 1
         try:
             dry_run_model(entry, token=hf_token)
             return 0
@@ -422,7 +472,6 @@ def fetch_model_weights(
             print(f"Dry-run failed: {exc}", file=sys.stderr)
             return 1
 
-    dest_dir = dest_dir.resolve()
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
@@ -432,6 +481,16 @@ def fetch_model_weights(
     print(f"License:        {entry.license}")
     print(f"Destination:    {dest_dir}")
     print("=" * 70)
+
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError:
+        print(
+            "Error: 'huggingface_hub' is required to download model weights.\n"
+            "Install it via: pip install huggingface-hub",
+            file=sys.stderr,
+        )
+        return 1
 
     try:
         snapshot_download(
@@ -518,8 +577,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "-d", "--dest",
         type=Path,
-        default=DEFAULT_DEST_DIR,
-        help=f"Destination directory (default: {DEFAULT_DEST_DIR}).",
+        default=None,
+        help="Destination directory (default: weights/<model_key>).",
     )
     parser.add_argument(
         "--subfolder",
@@ -572,9 +631,12 @@ def main(argv: list[str] | None = None) -> int:
         print_model_table(args.registry)
         return 0
 
-    dest_dir = args.dest
-    if args.subfolder:
-        dest_dir = dest_dir / args.model
+    if args.dest is None:
+        dest_dir = DEFAULT_DEST_DIR / args.model
+    else:
+        dest_dir = args.dest
+        if args.subfolder:
+            dest_dir = dest_dir / args.model
 
     if args.verify_only:
         target_dir = dest_dir

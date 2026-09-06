@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from scripts.validate_colab_tutorials import (

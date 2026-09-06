@@ -67,7 +67,7 @@ def select_bounded(
     identity_field: str,
     key_fields: tuple[str, ...],
 ) -> list[BoundedSelection]:
-    """Select the ``count`` smallest stable ranks in one pass with O(count) memory.
+    """Select the ``count`` smallest stable ranks in one pass with O(count) row memory.
 
     Output is rank-ordered rather than source-index-ordered. Source indices can change when
     upstream serialization order changes, while the identity/rank are derived only from a

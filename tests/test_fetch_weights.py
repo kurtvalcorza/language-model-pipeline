@@ -388,17 +388,25 @@ def test_verify_snapshot_rejects_symlinks(tmp_path: Path):
 
     model_dir = tmp_path / "symlink_test_model"
     model_dir.mkdir()
-    real_file = tmp_path / "real_file.txt"
-    real_file.write_bytes(b"real content")
     (model_dir / "model.safetensors").write_bytes(b"data")
 
-    link_path = model_dir / "linked.safetensors"
+    # 1. In-root symlink: points to another file inside model_dir
+    target_in_root = model_dir / "target_internal.safetensors"
+    target_in_root.write_bytes(b"internal content")
+    in_root_link = model_dir / "in_root_link.safetensors"
+
+    # 2. Out-of-root symlink: points to a file outside model_dir
+    target_outside = tmp_path / "target_outside.txt"
+    target_outside.write_bytes(b"outside content")
+    out_root_link = model_dir / "out_root_link.safetensors"
+
     try:
-        os.symlink(real_file, link_path)
+        os.symlink(target_in_root, in_root_link)
+        os.symlink(target_outside, out_root_link)
     except OSError:
         pytest.skip("Creating symlinks requires special privileges on Windows")
 
-    # Manifest generation must reject symlink
+    # Manifest generation must reject any symlink on disk
     with pytest.raises(ValueError, match="Symlinks not allowed"):
         generate_manifest(
             model_dir=model_dir,
@@ -407,8 +415,8 @@ def test_verify_snapshot_rejects_symlinks(tmp_path: Path):
             revision="c1899de289a04d12100db370d81485cdf75e47ca",
         )
 
-    # Verification must also reject symlink in manifest
-    manifest = {
+    # In-root symlink verification must report explicit "Symlinks not allowed"
+    manifest_in_root = {
         "format": MANIFEST_FORMAT,
         "formatVersion": MANIFEST_FORMAT_VERSION,
         "modelKey": "qwen3-0.6b",
@@ -421,14 +429,43 @@ def test_verify_snapshot_rejects_symlinks(tmp_path: Path):
                 "sha256": sha256_file(model_dir / "model.safetensors"),
             },
             {
-                "path": "linked.safetensors",
-                "bytes": len(b"real content"),
-                "sha256": sha256_file(real_file),
+                "path": "in_root_link.safetensors",
+                "bytes": len(b"internal content"),
+                "sha256": sha256_file(target_in_root),
             },
         ],
-        "totalBytes": 4 + len(b"real content"),
+        "totalBytes": 4 + len(b"internal content"),
     }
-    (model_dir / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (model_dir / MANIFEST_NAME).write_text(json.dumps(manifest_in_root, indent=2), encoding="utf-8")
     valid, errors = verify_snapshot(model_dir)
     assert valid is False
     assert any("Symlinks not allowed" in e for e in errors)
+
+    # Out-of-root symlink verification must report "Path escape"
+    manifest_out_root = {
+        "format": MANIFEST_FORMAT,
+        "formatVersion": MANIFEST_FORMAT_VERSION,
+        "modelKey": "qwen3-0.6b",
+        "modelId": "Qwen/Qwen3-0.6B",
+        "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+        "files": [
+            {
+                "path": "model.safetensors",
+                "bytes": 4,
+                "sha256": sha256_file(model_dir / "model.safetensors"),
+            },
+            {
+                "path": "out_root_link.safetensors",
+                "bytes": len(b"outside content"),
+                "sha256": sha256_file(target_outside),
+            },
+        ],
+        "totalBytes": 4 + len(b"outside content"),
+    }
+    (model_dir / MANIFEST_NAME).write_text(
+        json.dumps(manifest_out_root, indent=2), encoding="utf-8"
+    )
+    valid, errors = verify_snapshot(model_dir)
+    assert valid is False
+    assert any("Path escape" in e for e in errors)
+

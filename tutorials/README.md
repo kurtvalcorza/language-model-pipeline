@@ -49,15 +49,15 @@ The fine-tuning tutorial is structured as an in-depth pedagogical guide rather t
 
 ### 4. 4-bit Quantization (QLoRA)
 - How loading base model weights in 4-bit NormalFloat (`nf4`) with double quantization reduces GPU memory consumption by over 60%.
-- How standard 16-bit fine-tuning of 3B+ models requires >24 GB VRAM, whereas QLoRA allows models up to 4B parameters to train comfortably within 6 GB to 10 GB of VRAM on standard consumer hardware.
+- How standard 16-bit fine-tuning of 3B+ models requires >24 GB VRAM, whereas QLoRA allows models up to 4B parameters to train within 6 GB to 10 GB of VRAM at standard conversational sequence lengths (≤512 tokens) using memory-efficient attention (SDPA). Note that activation memory scales super-linearly with sequence length—longer contexts (1k–2k+ tokens) require larger GPU memory allocations.
 
 ### 5. Recommended Hyperparameters & Configuration
-- **LoRA Rank ($r$) & Alpha ($\alpha$):** Setting $r = 16$ and $\alpha = 32$ provides a robust balance between representational capacity and parameter efficiency ($\\approx 0.5\\% - 2\\%$ of total parameters).
-- **Learning Rate:** Typically $2 \times 10^{-4}$ with a cosine learning rate decay and $3\\% - 10\\%$ linear warmup.
+- **LoRA Rank ($r$) & Alpha ($\alpha$):** Setting $r = 16$ and $\alpha = 32$ provides a robust balance between representational capacity and parameter efficiency ($\approx 0.5\% - 2\%$ of total parameters).
+- **Learning Rate:** Typically $2 \times 10^{-4}$ with a cosine learning rate decay and $3\% - 10\%$ linear warmup.
 - **Target Modules:** Injecting adapters into both attention projections (`q_proj`, `k_proj`, `v_proj`, `o_proj`) and feed-forward MLP blocks (`gate_proj`, `up_proj`, `down_proj`) ensures superior adaptation compared to attention-only LoRA.
 
 ### 6. Optimization Metrics vs. Task Quality
-- **Optimization Evidence:** Measures mathematical convergence on the training distribution (training cross-entropy loss, validation loss, validation perplexity $e^{\\text{loss}}$, gradient stability).
+- **Optimization Evidence:** Measures mathematical convergence on the training distribution (training cross-entropy loss, validation loss, validation perplexity $e^{\text{loss}}$, gradient stability).
 - **Task Quality:** Evaluates whether the fine-tuned model actually performs well on intended human tasks, which requires held-out benchmark datasets, rubric scoring, or human evaluation.
 - Why prompt probes before and after training illustrate behavioral shifts but do not constitute formal evaluation.
 
@@ -74,8 +74,8 @@ The tutorial includes a curated collection of verified, open-weights causal lang
 
 | Model Key | Parameters | Primary Strengths & Characteristics | License |
 |---|---|---|---|
-| **`qwen3-0.6b`** | 0.6B | **Default tutorial candidate.** Ultra-fast download (~1.41 GiB) and rapid training loop (~30s on T4). Ideal for quick verification. | Apache-2.0 |
-| **`qwen3-1.7b`** | 1.7B | Strong conversational reasoning, multi-turn instruction following, and measured QLoRA memory profile (~4.5 GiB SFT). | Apache-2.0 |
+| **`qwen3-0.6b`** | 0.6B | **Default tutorial candidate.** Ultra-fast download (~1.41 GiB) and rapid training loop (~1–2 min on Colab T4, ~50–100s on modern desktop GPUs). Ideal for quick verification. | Apache-2.0 |
+| **`qwen3-1.7b`** | 1.7B | Strong conversational reasoning, multi-turn instruction following, and measured QLoRA memory profile (9.3 GiB at seq 2048, ~4.5–5.5 GiB at seq ≤ 512). | Apache-2.0 |
 | **`qwen3-4b`** | 4.0B | High-capacity reasoning and knowledge retrieval; suitable for larger GPUs (>=12 GB VRAM). | Apache-2.0 |
 | **`smollm3-3b`** | 3.0B | Balanced modern 3B architecture from Hugging Face TB. | Apache-2.0 |
 | **`granite-4.1-3b`** | 3.0B | IBM Granite model with audited enterprise data governance and strong tool-calling performance. | Apache-2.0 |

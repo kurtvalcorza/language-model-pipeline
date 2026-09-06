@@ -56,6 +56,9 @@ def test_bounded_selector_is_independent_of_source_order():
     assert _content_ids(forward) == _content_ids(backward)
     assert [item.rank for item in forward] == [item.rank for item in backward]
     assert [item.identity for item in forward] == [item.identity for item in backward]
+    assert [item.row["conversations"] for item in forward] == [
+        item.row["conversations"] for item in backward
+    ]
     assert identity_digest(forward) == identity_digest(backward)
 
 

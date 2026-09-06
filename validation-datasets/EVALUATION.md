@@ -22,11 +22,11 @@ and truncated fingerprints only.
 
 ## Build
 
-Install the optional fetch dependency and authenticate the Hugging Face account that accepted
-the source terms, then run:
+From a fresh clone, install this repository together with its optional fetch dependency and
+authenticate the Hugging Face account that accepted the source terms, then run:
 
 ```bash
-pip install datasets
+pip install -e '.[fetch]'
 python scripts/build_kalahi_evaluation.py kalahi --profile full
 ```
 

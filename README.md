@@ -39,6 +39,21 @@ SECURITY.md              supply-chain and privacy rules
 
 The registry deliberately has **no copy at the repo root**. One file, no drift.
 
+## Standalone Colab tutorials
+
+The `tutorials/` directory provides an educational, standalone path through the same
+language-model SFT capability without requiring DIMER Workbench.
+
+[![Open Fine-Tuning Tutorial In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb)
+
+[![Open Artifact Inference In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb)
+
+The fine-tuning notebook covers approved-model resolution, sample/BYOD validation,
+tokenizer-aware checks, baseline generation, LoRA/QLoRA SFT, before/after generation,
+new-prompt inference, adapter-first export and fresh reload. The inference notebook verifies
+an exported artifact and reconstructs it from the exact pinned base revision without the
+training dataset. See [`tutorials/README.md`](tutorials/README.md).
+
 ## Model selection
 
 > **Corrected by the 2026-08-23 source-verified audit** (`COMPLIANCE.md`, normative). Two

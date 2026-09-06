@@ -154,28 +154,33 @@ sources:
     source_type: huggingface
     source_id: aisingapore/Cultural-Evaluation-Kalahi
     revision: 236decdf946498dd5f1c4efa270ba169fe725ad3
-    config: null
-    split: null
+    # Pinned dataset card re-inspected 2026-09-06: one Tagalog config, one `eval` split,
+    # exactly 150 rows. Recording both prevents the loader from guessing defaults.
+    config: tl
+    split: eval
     license: CC-BY-4.0
     license_url: https://huggingface.co/datasets/aisingapore/Cultural-Evaluation-Kalahi
     gated: true                        # the spec omitted this; it is gated
     # Upstream terms accepted on the owner's HF account, recorded from owner confirmation
     # 2026-08-22 (issue #10).
     terms_accepted: true
-    redistribution: unclear
+    redistribution: unclear            # gated rows are never committed; recipes/digests only
     # EVALUATION ONLY. Never an SFT training profile, and never overlapping one.
     intended_use: [evaluation_only]
     languages: [tl]
-    # The MCQ-compatible SEA-HELM variant, so an evaluation loader is multiple-choice,
-    # not free-form reference answers.
-    source_schema: null
+    # Exact MCQ-compatible SEA-HELM source shape from the pinned dataset card. `label` is
+    # deliberately left semantically opaque here; the loader preserves it and a separately
+    # versioned scoring harness must define how it is interpreted.
+    source_schema:
+      id: str
+      label: str
+      prompts:
+        - {question: str, mcq_options: str, mcq: str}
+      metadata: {language: str, category: str, topic: str}
     canonical_schema: evaluation
-    conversion_version: 0
-    verified_on: "2026-08-21"
-    # Fetchable now that terms are accepted. Still has no profiles: this is the held-out
-    # evaluation tier, and `intended_use: [evaluation_only]` makes require_usable_for_training
-    # refuse it regardless of this flag. An evaluation loader is MCQ-shaped (SEA-HELM
-    # variant), which is separate work from the SFT path.
+    conversion_version: 1
+    verified_on: "2026-09-06"
     enabled: true
     approval_state: experimental
-    profiles: {}
+    profiles:
+      full: {count: 150, selection: all}

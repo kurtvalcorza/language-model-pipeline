@@ -1,14 +1,18 @@
+from pathlib import Path
+from runpy import run_path
+
 import pytest
 
-from scripts.validate_colab_tutorials import (
-    INFERENCE,
-    MAIN,
-    code_text,
-    load_notebook,
-    markdown_text,
-    validate_member_path,
-    validate_notebooks,
+VALIDATOR = run_path(
+    Path(__file__).resolve().parents[1] / "scripts" / "validate_colab_tutorials.py"
 )
+INFERENCE = VALIDATOR["INFERENCE"]
+MAIN = VALIDATOR["MAIN"]
+code_text = VALIDATOR["code_text"]
+load_notebook = VALIDATOR["load_notebook"]
+markdown_text = VALIDATOR["markdown_text"]
+validate_member_path = VALIDATOR["validate_member_path"]
+validate_notebooks = VALIDATOR["validate_notebooks"]
 
 
 def test_notebooks_exist_and_validate():

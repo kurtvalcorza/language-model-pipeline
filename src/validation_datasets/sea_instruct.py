@@ -12,7 +12,11 @@ import json
 from typing import Any
 
 APPROVED_ROLES = frozenset({"system", "user", "assistant"})
-SEA_IDENTITY_FIELDS = ("conversations_id", "conversations")
+# Upstream documents conversations_id as the unique conversation identifier. Using it for
+# streaming selection avoids a source-cardinality duplicate table; content is mixed into the
+# identity separately so a same-ID/different-content anomaly still ranks deterministically.
+SEA_IDENTITY_FIELD = "conversations_id"
+SEA_SELECTION_FIELDS = ("conversations",)
 
 
 class SeaInstructError(ValueError):
@@ -64,7 +68,7 @@ def canonicalize_sea_instruct(row: dict[str, Any], *, index: int) -> dict[str, A
     Source/tagging metadata is intentionally not injected into the training text. It remains
     available to the builder for manifest/evidence reporting and profile policy.
     """
-    conversation_id = row.get("conversations_id")
+    conversation_id = row.get(SEA_IDENTITY_FIELD)
     if not isinstance(conversation_id, str) or not conversation_id.strip():
         raise SeaInstructError(
             f"row {index}: 'conversations_id' must be a non-empty string"

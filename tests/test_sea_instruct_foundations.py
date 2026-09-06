@@ -5,13 +5,17 @@ import json
 import pytest
 
 from validation_datasets.sea_instruct import (
-    SEA_IDENTITY_FIELDS,
+    SEA_IDENTITY_FIELD,
+    SEA_SELECTION_FIELDS,
     SeaInstructError,
     canonicalize_sea_instruct,
     parse_conversations,
 )
-from validation_datasets.streaming import identity_digest, select_bounded
-from validation_datasets.subset import select
+from validation_datasets.streaming import (
+    StreamingSelectionError,
+    identity_digest,
+    select_bounded,
+)
 
 
 def _row(index: int) -> dict:
@@ -25,38 +29,33 @@ def _row(index: int) -> dict:
     }
 
 
+def _select(rows, *, count=25, salt="profile"):
+    return select_bounded(
+        rows,
+        count=count,
+        salt=salt,
+        identity_field=SEA_IDENTITY_FIELD,
+        key_fields=SEA_SELECTION_FIELDS,
+    )
+
+
 def _content_ids(items) -> set[str]:
     return {item.row["conversations_id"] for item in items}
 
 
-def test_bounded_selector_matches_existing_stable_hash_choice_for_unique_rows():
-    rows = [_row(i) for i in range(500)]
-    expected = select(
-        rows,
-        count=37,
-        salt="sea:filipino_37",
-        key_fields=SEA_IDENTITY_FIELDS,
-        selection="stable_hash",
-    )
-    actual = select_bounded(
-        rows,
-        count=37,
-        salt="sea:filipino_37",
-        key_fields=SEA_IDENTITY_FIELDS,
-    )
-    assert _content_ids(actual) == {row["conversations_id"] for _, row in expected}
+def test_bounded_selector_keeps_exact_profile_size_and_rank_order():
+    selected = _select([_row(i) for i in range(500)], count=37)
+    assert len(selected) == 37
+    assert [item.rank for item in selected] == sorted(item.rank for item in selected)
 
 
 def test_bounded_selector_is_independent_of_source_order():
     rows = [_row(i) for i in range(300)]
-    forward = select_bounded(
-        rows, count=25, salt="profile", key_fields=SEA_IDENTITY_FIELDS
-    )
-    backward = select_bounded(
-        reversed(rows), count=25, salt="profile", key_fields=SEA_IDENTITY_FIELDS
-    )
+    forward = _select(rows)
+    backward = _select(reversed(rows))
     assert _content_ids(forward) == _content_ids(backward)
     assert [item.rank for item in forward] == [item.rank for item in backward]
+    assert [item.identity for item in forward] == [item.identity for item in backward]
     assert identity_digest(forward) == identity_digest(backward)
 
 
@@ -69,34 +68,44 @@ def test_bounded_selector_consumes_a_one_pass_generator():
             consumed += 1
             yield _row(i)
 
-    selected = select_bounded(
-        rows(), count=10, salt="stream", key_fields=SEA_IDENTITY_FIELDS
-    )
+    selected = _select(rows(), count=10, salt="stream")
     assert consumed == 1000
     assert len(selected) == 10
 
 
 def test_bounded_selector_rejects_non_positive_profile_size():
     with pytest.raises(ValueError, match="positive"):
-        select_bounded([], count=0, salt="x", key_fields=SEA_IDENTITY_FIELDS)
+        _select([], count=0)
 
 
-def test_duplicate_occurrences_have_stable_identity_evidence():
+def test_missing_stable_source_identity_fails_closed():
+    row = _row(1)
+    row["conversations_id"] = ""
+    with pytest.raises(StreamingSelectionError, match="stable identity"):
+        _select([row], count=1)
+
+
+def test_exact_duplicate_rows_have_order_stable_identity_evidence():
     duplicate = _row(1)
     rows = [_row(0), duplicate, _row(2), dict(duplicate), _row(3)]
-    first = select_bounded(
-        rows, count=5, salt="all-small", key_fields=SEA_IDENTITY_FIELDS
-    )
-    reordered = select_bounded(
+    first = _select(rows, count=5, salt="all-small")
+    reordered = _select(
         [dict(duplicate), _row(3), _row(2), duplicate, _row(0)],
         count=5,
         salt="all-small",
-        key_fields=SEA_IDENTITY_FIELDS,
     )
     assert sorted(item.identity for item in first) == sorted(
         item.identity for item in reordered
     )
     assert identity_digest(first) == identity_digest(reordered)
+
+
+def test_same_source_id_with_different_content_gets_distinct_identity():
+    first = _row(7)
+    second = _row(8)
+    second["conversations_id"] = first["conversations_id"]
+    selected = _select([first, second], count=2)
+    assert len({item.identity for item in selected}) == 2
 
 
 def test_strict_json_conversation_becomes_canonical_messages():

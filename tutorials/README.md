@@ -74,8 +74,8 @@ The tutorial includes a curated collection of verified, open-weights causal lang
 
 | Model Key | Parameters | Primary Strengths & Characteristics | License |
 |---|---|---|---|
-| **`qwen3-0.6b`** | 0.6B | **Default tutorial candidate.** Ultra-fast download (~1.41 GiB) and rapid training loop (~1–2 min on Colab T4, ~50–100s on modern desktop GPUs). Ideal for quick verification. | Apache-2.0 |
-| **`qwen3-1.7b`** | 1.7B | Strong conversational reasoning, multi-turn instruction following, and measured QLoRA memory profile (9.3 GiB at seq 2048, ~4.5–5.5 GiB at seq ≤ 512). | Apache-2.0 |
+| **`qwen3-0.6b`** | 0.6B | **Default tutorial candidate.** Ultra-fast download (~1.41 GiB) and rapid, lightweight training loop suitable for standard single-GPU Colab environments. Ideal for quick pedagogical walkthroughs and pipeline verification without runtime timeouts. | Apache-2.0 |
+| **`qwen3-1.7b`** | 1.7B | Strong conversational reasoning, multi-turn instruction following, and measured QLoRA memory profile (9.3 GiB at seq 2048; shorter sequences substantially reduce activation memory). | Apache-2.0 |
 | **`qwen3-4b`** | 4.0B | High-capacity reasoning and knowledge retrieval; suitable for larger GPUs (>=12 GB VRAM). | Apache-2.0 |
 | **`smollm3-3b`** | 3.0B | Balanced modern 3B architecture from Hugging Face TB. | Apache-2.0 |
 | **`granite-4.1-3b`** | 3.0B | IBM Granite model with audited enterprise data governance and strong tool-calling performance. | Apache-2.0 |

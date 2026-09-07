@@ -128,6 +128,6 @@ def test_inference_notebook_supports_hf_secret_and_dimer_zip():
 def test_no_training_rows_written_to_artifact_code():
     code = code_text(load_notebook(MAIN))
     # Artifact publication should serialize model/tokenizer/metrics/provenance, not SPLITS.
-    artifact_section = code[code.index('S=Path("/content/dimer-lm-adapter.staging")') :]
+    artifact_section = code[code.index('Path("/content/dimer-lm-adapter.staging")') :]
     assert 'write_text(json.dumps(SPLITS' not in artifact_section
     assert 'json.dump(SPLITS' not in artifact_section

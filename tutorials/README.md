@@ -21,11 +21,15 @@ Run these interactive tutorials directly in your browser on standard single-GPU 
 
 ## What is Language Model Fine-Tuning?
 
-Modern causal language models undergo distinct training stages before deployment:
+Modern causal language models go through three training stages before release:
 
-1. **Pre-Training (Foundational Knowledge):** Models learn language structure, syntax, and broad factual knowledge by predicting the next token across trillions of tokens of unstructured web text. Pre-trained base models act as raw text completers rather than conversational assistants.
-2. **Supervised Fine-Tuning (SFT / Instruction Tuning):** Adapts the pre-trained base model to follow human instructions and conversational conventions using curated prompt-response pairs. SFT aligns the model's output distribution to produce direct, structured, and helpful responses formatted with standardized chat templates.
-3. **Parameter-Efficient Fine-Tuning (PEFT / QLoRA):** Instead of updating all billions of parameters during SFT (which requires prohibitive GPU memory and produces massive redundant checkpoints), PEFT freezes the base model and trains low-rank adapter matrices. QLoRA quantizes the frozen base model to 4-bit NormalFloat (`nf4`), allowing models with billions of parameters to be fine-tuned efficiently on accessible consumer GPUs (such as the free Google Colab 15 GB T4).
+1. **Pre-training:** the model learns language structure and broad factual knowledge by predicting the next token over trillions of tokens of web text. A pre-trained *base* checkpoint is a text completer, not an assistant.
+2. **Supervised fine-tuning (SFT / instruction tuning):** curated prompt-response pairs teach the model to follow instructions and to speak in a chat format (system / user / assistant turns rendered by a chat template).
+3. **Preference tuning (RLHF, DPO and relatives):** human or model preferences shape which of several plausible answers the model prefers.
+
+**PEFT / QLoRA is not a fourth stage; it is a cheap way to run stage 2.** Instead of updating billions of parameters (which needs tens of gigabytes of GPU memory and produces a full checkpoint per variant), PEFT freezes the base model and trains small low-rank adapter matrices. QLoRA additionally holds the frozen base in 4-bit NormalFloat (`nf4`), which is what lets a 0.6B-4B model train on a free Colab T4.
+
+**What these tutorials actually do.** Every model in the registry below is already an instruction-tuned release (Qwen3, SmolLM2/3-Instruct, Granite-instruct, DeepSeek-R1-Distill, Llama-3.2-Instruct, and so on). Fine-tuning one on a few hundred rows adapts *how* it answers (language, register, format) rather than teaching it to answer at all. Expect subtle shifts, and some forgetting if you train hard.
 
 ---
 
@@ -44,16 +48,17 @@ The fine-tuning tutorial is structured as an in-depth pedagogical guide rather t
 
 ### 3. Assistant-Only Loss Masking
 - How computing cross-entropy loss over entire sequences causes models to waste capacity memorizing user prompts.
-- How prefix-stable tokenization identifies the exact token boundaries corresponding to assistant turns and assigns non-assistant tokens label value `-100` (PyTorch `ignore_index`).
+- How the notebook locates assistant turns inside the rendered conversation with the tokenizer's character offsets, assigns every other token the label `-100` (PyTorch `ignore_index`), and prints one example with the supervised tokens marked so you can see exactly what is learned: the answer text and its end-of-turn marker, but not the user turn, the role markers, or Qwen3's `<think>` scaffold (which the template supplies at inference).
 - Why gradients should only update parameters based on the assistant's predicted response tokens.
 
 ### 4. 4-bit Quantization (QLoRA)
-- How loading base model weights in 4-bit NormalFloat (`nf4`) with double quantization reduces GPU memory consumption by over 60%.
+- How loading base model weights in 4-bit NormalFloat (`nf4`) with double quantization cuts weight memory roughly four-fold versus 16-bit (the default run peaks at a measured 1.52 GiB of allocated GPU memory, weights, activations and optimizer state included).
 - How standard 16-bit fine-tuning of 3B+ models requires >24 GB VRAM, whereas QLoRA dramatically reduces memory footprints—measured at 1.52 GiB peak allocated VRAM for Qwen3-0.6B (≤512 tokens, SDPA) on a Tesla T4, and estimated at 6 GB to 10 GB for 3B–4B models at standard conversational lengths (≤512 tokens) based on scaling from sequence-length 2048 measurements (9.3 GiB for Qwen3-1.7B, 11.5 GiB for Qwen3-4B). Note that activation memory scales super-linearly with sequence length—longer contexts (1k–2k+ tokens) require larger GPU memory allocations.
 
 ### 5. Recommended Hyperparameters & Configuration
 - **LoRA Rank ($r$) & Alpha ($\alpha$):** Setting $r = 16$ and $\alpha = 32$ provides a robust balance between representational capacity and parameter efficiency ($\approx 0.5\% - 2\%$ of total parameters).
 - **Learning Rate:** Typically $2 \times 10^{-4}$ with a cosine learning rate decay and $3\% - 10\%$ linear warmup.
+- **What the notebook ships with:** $r = 8$, $\alpha = 16$ and a constant learning rate with no warmup or schedule. That is enough for a one-epoch demonstration and keeps the training loop readable; raise the rank and add a schedule when training for real. The recap section of the notebook lists the experiments to run next, in the order they teach the most.
 - **Target Modules:** Injecting adapters into both attention projections (`q_proj`, `k_proj`, `v_proj`, `o_proj`) and feed-forward MLP blocks (`gate_proj`, `up_proj`, `down_proj`) ensures superior adaptation compared to attention-only LoRA.
 
 ### 6. Optimization Metrics vs. Task Quality
@@ -62,9 +67,9 @@ The fine-tuning tutorial is structured as an in-depth pedagogical guide rather t
 - Why prompt probes before and after training illustrate behavioral shifts but do not constitute formal evaluation.
 
 ### 7. Adapter-First Export and Clean Reload
-- Why exporting only the low-rank delta matrices and tokenizer files (typically 50–150 MB) is dramatically more portable than exporting redundant multi-gigabyte base model copies.
+- Why exporting only the low-rank delta matrices and tokenizer files (36 MB for the default 0.6B model at rank 8; a few tens of megabytes for the larger registry models) is dramatically more portable than exporting redundant multi-gigabyte base model copies.
 - How an `artifact-manifest.json` tracks byte counts and SHA-256 digests for all exported files.
-- Why verifying a fresh reload from disk—clearing memory and attaching the saved adapter to a clean base model—is necessary to prove deployment readiness.
+- Why a fresh reload from disk—clearing memory, reloading the base model, attaching the saved adapter, and checking that it reproduces the in-memory model's answer—is the minimum proof that the bundle is usable. It is not proof of task quality; that needs your own held-out evaluation.
 
 ---
 
@@ -132,7 +137,8 @@ The tutorial normalizes diverse instruction-tuning schemas into a canonical conv
 - **Assistant Target Verification:** Verifies that every training example contains at least one non-empty assistant response turn to supervise.
 - **Split Leakage Detection:** Computes deterministic SHA-256 fingerprints of canonical records and immediately halts training if identical examples appear in both training and validation splits.
 - **Duplicate Awareness:** Detects and reports exact duplicate examples within splits for transparency.
-- **Sequence Length Boundaries:** Flags and rejects examples exceeding `MAX_SEQUENCE_LENGTH` rather than silently truncating them, preventing context corruption.
+- **Sequence Length Boundaries:** Flags and rejects examples exceeding `MAX_SEQUENCE_LENGTH` rather than silently truncating them, preventing context corruption. The two shipped samples are pre-selected (in token terms) to fit the default limit; your own rows are not filtered, so an over-length row stops the run with a clear error.
+- **Licenses travel with the adapter:** the dataset license is recorded in `provenance.json`. Dolly is CC-BY-SA 3.0, so adapters trained on it carry the share-alike condition.
 
 ---
 
@@ -142,8 +148,8 @@ The tutorial normalizes diverse instruction-tuning schemas into a canonical conv
 |---|---|---|
 | **Training on Prompt Tokens** | Model spends capacity memorizing user inputs; generates repetitive user questions. | Use assistant-only loss masking with label `ignore_index = -100` on prompt tokens. |
 | **Chat Template Mismatch** | Model fails to generate turn-separators or hallucinates conversation roles during inference. | Apply tokenizer chat templates (`tokenizer.apply_chat_template`) during training and inference. |
-| **Overfitting & Degradation** | Validation loss increases while training loss drops; general knowledge and reasoning degrade. | Monitor validation loss early-stopping, use modest learning rates ($10^{-4}$ to $2 \times 10^{-4}$), and keep LoRA rank moderate ($r = 8 - 16$). |
-| **Train/Validation Split Leakage** | Optimistic validation metrics that fail to reflect real-world generalization. | Deduplicate dataset and hash records to ensure strict zero-overlap between splits. |
+| **Overfitting & Degradation** | Validation loss increases while training loss drops; general knowledge and reasoning degrade. | Watch validation loss per epoch (the notebook prints it) and keep the epoch where it is lowest; use modest learning rates ($10^{-4}$ to $2 \times 10^{-4}$) and a moderate LoRA rank ($r = 8 - 16$). |
+| **Train/Validation Split Leakage** | Optimistic validation metrics that fail to reflect real-world generalization. | Hash every record; the notebook halts on any overlap between splits and reports in-split duplicates for you to resolve. |
 | **Unquantized Merging on Quantized Weights** | Fusing FP16 LoRA deltas into 4-bit base weights degrades numerical precision. | Always dequantize base weights to FP16/BF16 before merging adapter matrices. |
 
 ---
@@ -157,4 +163,4 @@ Once training completes and the self-contained adapter package is exported, you 
 2. **Local Python Integration (PEFT & Transformers):**
    Load the base model and dynamically attach the adapter in evaluation mode (`is_trainable=False`) as demonstrated in our companion [Artifact Inference](language_model_artifact_inference_colab.ipynb) tutorial.
 3. **Zero-Overhead Weight Merging:**
-   Fuse the trained low-rank matrices directly into the base model weights using `model.merge_and_unload()`. This produces a standalone, unified checkpoint that can be served by any standard inference framework without PEFT dependencies or adapter latency overhead.
+   Fuse the trained low-rank matrices into the base model weights with `model.merge_and_unload()` to get a standalone checkpoint with no PEFT dependency. Do this on a 16-bit copy of the base model, not on the 4-bit model the tutorial trains on: merging into quantized weights loses precision (the pitfall in the table above). Merge, `save_pretrained`, then convert (for example to GGUF) for llama.cpp or Ollama.

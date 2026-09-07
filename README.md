@@ -91,6 +91,29 @@ python scripts/vendor_sync.py verify --into src/_vendor    # CI gate; non-zero o
 When this repo goes public, delete the vendored tree and add a pip requirement instead.
 Import paths do not change.
 
+## Base model weights
+
+Base model weights are not committed to git (see `weights/` in `.gitignore`). Use `scripts/fetch_weights.py`
+to download approved causal LM weights at pinned immutable revisions, with automatic `dimer-base-manifest.json`
+generation and integrity verification:
+
+```bash
+# List all registered base models and status
+python scripts/fetch_weights.py --list
+
+# Download default base model (qwen3-1.7b) into weights/
+python scripts/fetch_weights.py
+
+# Download a specific registered model (e.g., smollm3-3b)
+python scripts/fetch_weights.py --model smollm3-3b
+
+# Check download files and sizes without downloading
+python scripts/fetch_weights.py --model qwen3-1.7b --dry-run
+
+# Verify snapshot integrity against dimer-base-manifest.json
+python scripts/fetch_weights.py --verify-only --dest weights/
+```
+
 ## Development
 
 ```bash

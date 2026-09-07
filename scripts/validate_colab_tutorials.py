@@ -15,9 +15,10 @@ INFERENCE = TUTORIALS / "language_model_artifact_inference_colab.ipynb"
 
 MAIN_MARKERS = (
     "TUTORIAL_REGISTRY",
+    '"qwen3-0.6b"',
     '"smollm3-3b"',
     '"llama-3.2-3b-instruct"',
-    'BASE_MODEL_KEY = "smollm3-3b"',
+    'BASE_MODEL_KEY = "qwen3-0.6b"',
     'userdata.get("HF_TOKEN")',
     'MODEL_SOURCE = "Pinned Hugging Face"',
     '"dimer-base-manifest.json"',

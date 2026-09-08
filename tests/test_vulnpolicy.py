@@ -236,52 +236,41 @@ def test_render_names_the_blocking_findings():
     assert "BLOCKING" in text and "PYSEC-1" in text
 
 
-# -- the real advisories this repository actually carries ---------------------------
+# -- retired dependency exceptions -------------------------------------------------
 
 
-def test_the_two_transformers_advisories_are_finetuner_only_today():
-    """The exception must follow the package after C-1, not remain on the validator.
+def test_fixed_transformers_exceptions_are_absent_from_the_committed_policy():
+    """Fixed advisories must leave the waiver set, not linger as historical suppressions."""
+    policy = load_policy()
+    retired = {
+        "PYSEC-2026-2288",
+        "PYSEC-2026-2289",
+        "GHSA-xrqw-3rrv-vx5w",
+    }
+    identifiers = {entry["id"] for entry in policy["exceptions"]}
+    assert identifiers.isdisjoint(retired)
+    assert all(entry["package"] != "transformers" for entry in policy["exceptions"])
 
-    transformers 4.57.1 carries five advisories; three have no fix anywhere and are
-    reported, two are fixed only in 5.0.0 / 5.3.0. The finetuner still carries transformers
-    and retains the reviewed exceptions. The model-agnostic validator no longer installs the
-    package, so an artificial transformers finding in validator scope must block rather than
-    inherit an exception written for a different image.
-    """
+
+def test_retired_transformers_findings_would_block_if_reintroduced():
+    """A future regression to a vulnerable pin must not inherit the removed waivers."""
     policy = load_policy()
     findings = [
         Finding("pip-audit", "PYSEC-2026-2288", "transformers", "4.57.1", "UNKNOWN", "5.0.0"),
         Finding("pip-audit", "PYSEC-2026-2289", "transformers", "4.57.1", "UNKNOWN", "5.3.0"),
-        Finding("pip-audit", "PYSEC-2025-217", "transformers", "4.57.1", "UNKNOWN", None),
+        Finding(
+            "pip-audit",
+            "GHSA-xrqw-3rrv-vx5w",
+            "transformers",
+            "4.57.1",
+            "UNKNOWN",
+            "5.10.0",
+        ),
     ]
-
-    finetuner = evaluate(findings, policy=policy, scope="finetuner", today=TODAY)
-    assert finetuner.ok, render(finetuner)
-    assert len(finetuner.excepted) == 2
-    assert len(finetuner.reported) == 1
-
-    validator = evaluate(findings, policy=policy, scope="validator", today=TODAY)
-    assert not validator.ok
-    assert len(validator.blocking) == 2
-    assert len(validator.reported) == 1
-
-    for identifier in ("PYSEC-2026-2288", "PYSEC-2026-2289"):
-        entry = next(e for e in policy["exceptions"] if e["id"] == identifier)
-        assert entry["scope"] == ["finetuner"]
-
-
-def test_those_exceptions_expire_and_then_block():
-    """Proof the expiry is real: the same input, a later date, and the gate closes."""
-    policy = load_policy()
-    finding = Finding("pip-audit", "PYSEC-2026-2288", "transformers", "4.57.1",
-                      "UNKNOWN", "5.0.0")
-    expiry = dt.date.fromisoformat(
-        str(next(e for e in policy["exceptions"] if e["id"] == "PYSEC-2026-2288")["expires"])
-    )
-    after = expiry + dt.timedelta(days=1)
-    decision = evaluate([finding], policy=policy, scope="finetuner", today=after)
+    decision = evaluate(findings, policy=policy, scope="finetuner", today=TODAY)
     assert not decision.ok
-    assert decision.expired
+    assert len(decision.blocking) == 3
+    assert not decision.excepted
 
 
 def test_the_policy_file_ships_inside_the_package():

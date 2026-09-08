@@ -25,6 +25,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from lmpipeline.registry import ModelRegistry  # noqa: E402
+from lmpipeline.training_controls import CONTROL_DEFAULTS  # noqa: E402
 
 # Our task is not one of the three the backend recognizes, so `_normalize_task_type` folds it
 # to "object_detection". We send the honest value anyway: the normalization is lossy on the
@@ -58,6 +59,13 @@ COMMON_DEFAULTS: dict[str, Any] = {
     "per_device_batch_size": 1,
     "gradient_accumulation_steps": 16,
     "seed": 42,
+    # The training controls of #54 -- weight decay, LR schedule, early stopping -- are
+    # SPREAD IN from the shared package rather than repeated here. They are contract, not
+    # registration policy: the finetuner reads the same constant to know what a control
+    # means, so a value typed twice is a value that eventually disagrees with itself. Each
+    # default reproduces pre-control behaviour, and the reasoning is recorded next to them
+    # in `lmpipeline/training_controls.py`.
+    **CONTROL_DEFAULTS,
 }
 
 

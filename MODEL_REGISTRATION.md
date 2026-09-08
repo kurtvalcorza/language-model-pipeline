@@ -69,6 +69,15 @@ channel. The generator sets all four explicitly and the test suite asserts it.
 An entry missing `id` or `baseWeights` is **skipped**, not rejected — so a typo removes one
 model from the dropdown and reports nothing.
 
+`defaultTrainingParams` also carries the training controls from `TRAINING_SPEC.md` —
+`weight_decay`, `lr_scheduler_type`, `warmup_ratio`, `early_stopping_patience`,
+`early_stopping_min_delta`, `restore_best_adapter`. Registering them is what makes the
+regularization and schedule policy visible in the Builder rather than implicit in a library
+default, which is the point of #54; every value is chosen to reproduce pre-control behaviour,
+so registering them changes no run. A parameter the pipeline registry does not carry arrives
+at the container as `{}` with no error (`COMPLIANCE.md` C-8), so a control absent from the
+Builder form is a control the user cannot set — not one that falls back to the value here.
+
 ### What does `baseWeights` mean for a Hugging Face model at a pinned revision?
 
 **It is an opaque identity string.** The backend requires it to be non-empty and otherwise

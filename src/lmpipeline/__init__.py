@@ -15,13 +15,25 @@ from __future__ import annotations
 from .errors import Code, ConfigError, DatasetError, ModelError, PipelineError, Stage
 from .registry import ModelEntry, ModelRegistry
 from .result import Check, Result, write_result
+from .training_controls import (
+    CONTROL_DEFAULTS,
+    LR_SCHEDULER_TYPES,
+    STOPPING_REASONS,
+    lower_controls,
+    optimizer_steps_per_epoch,
+    resolve_warmup_steps,
+    total_optimizer_steps,
+)
 
 __version__ = "0.1.0"
 
-CONTRACT_VERSION = "1.0"
+CONTRACT_VERSION = "1.1"
 
 __all__ = [
     "CONTRACT_VERSION",
+    "CONTROL_DEFAULTS",
+    "LR_SCHEDULER_TYPES",
+    "STOPPING_REASONS",
     "Check",
     "Code",
     "ConfigError",
@@ -32,6 +44,10 @@ __all__ = [
     "PipelineError",
     "Result",
     "Stage",
+    "lower_controls",
+    "optimizer_steps_per_epoch",
+    "resolve_warmup_steps",
+    "total_optimizer_steps",
     "write_result",
     "__version__",
 ]

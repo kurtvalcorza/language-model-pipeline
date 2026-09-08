@@ -50,8 +50,65 @@
           "description": "Already clamped to the registry ceiling. The registry narrows the manifest envelope and never widens it.",
           "minimum": 1
         },
-        "validationSplit": {"type": "number", "minimum": 0, "exclusiveMaximum": 1}
+        "validationSplit": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
+
+        "weightDecay": {
+          "type": "number",
+          "description": "AdamW decoupled weight decay, stated rather than inherited from the optimizer default. 0.0 is a legitimate choice for LoRA SFT and must stay expressible, so the lower bound is inclusive.",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "lrSchedulerType": {
+          "type": "string",
+          "description": "`constant` reproduces the pre-control behaviour and is supported for exactly that reason: an existing registration must be able to keep the learning rate it was measured at.",
+          "enum": ["constant", "linear", "cosine"]
+        },
+        "warmupRatio": {
+          "type": "number",
+          "description": "Fraction of the run's optimizer steps spent warming up. Exclusive upper bound: a warmup covering every step leaves no step for the schedule that follows it, so 1.0 would describe a run whose declared schedule never takes effect.",
+          "minimum": 0,
+          "exclusiveMaximum": 1
+        },
+        "warmupSteps": {
+          "type": "integer",
+          "description": "Warmup expressed in optimizer steps instead of a ratio. Steps are counted on optimizer updates, not micro-batches, so the value does not shift when gradient accumulation changes.",
+          "minimum": 0
+        },
+
+        "earlyStopping": {
+          "type": "object",
+          "description": "Absent means disabled, and absence is the ONLY way to say disabled. A `patience: 0` spelling would be a second representation of the same state, and two spellings of off is how a run ends up stopping for a reason nobody selected.",
+          "properties": {
+            "patience": {
+              "type": "integer",
+              "description": "Consecutive epochs without a qualifying improvement before the run stops. 1 stops at the first such epoch.",
+              "minimum": 1
+            },
+            "minDelta": {
+              "type": "number",
+              "description": "How much validation loss must fall to count as an improvement and reset patience. 0.0 means any decrease counts.",
+              "minimum": 0
+            },
+            "restoreBestAdapter": {
+              "type": "boolean",
+              "description": "When true the published artifact is the adapter from the best validation epoch rather than the last completed one. Recorded here because the two are different artifacts and nothing downstream could otherwise tell which was published."
+            }
+          },
+          "required": ["patience", "minDelta", "restoreBestAdapter"],
+          "additionalProperties": false
+        }
       },
+
+      "$comment": "A warmup without a declared schedule leaves the post-warmup shape unstated, so it is not accepted on its own. The new controls are otherwise optional: the finetuner's Job.to_dict() emits them as it gains them, and a document from before it did must keep validating.",
+      "dependentRequired": {
+        "warmupRatio": ["lrSchedulerType"],
+        "warmupSteps": ["lrSchedulerType"]
+      },
+      "not": {
+        "description": "Both spellings of warmup at once is ambiguous, and the ambiguity is silent: whichever the runtime happens to read wins and the document still looks well-formed.",
+        "required": ["warmupRatio", "warmupSteps"]
+      },
+
       "required": [
         "method",
         "epochs",

@@ -87,6 +87,52 @@
                       "trustRemoteCode": {
                         "description": "Recorded so an artifact built with remote code execution enabled is identifiable after the fact.",
                         "const": false
+                      },
+
+                      "trainingControls": {
+                        "type": "object",
+                        "description": "What the training controls DID, as against what the job asked for -- the request is already legible in the embedded job document. Optional, because a finetuner that has not yet gained the controls still emits a valid result; once it emits this block the block must be complete, which is what the inner `required` is for.",
+                        "properties": {
+                          "stoppingReason": {
+                            "type": "string",
+                            "description": "Why the run stopped. Two states only: it exhausted its epoch budget, or patience ran out. A failure does not reach this branch at all.",
+                            "enum": ["epochs_completed", "early_stopping"]
+                          },
+                          "epochsCompleted": {
+                            "type": "integer",
+                            "description": "Epochs actually run. Without it `early_stopping` is an unfalsifiable claim -- there is no way to see that the run ended short of its budget.",
+                            "minimum": 1
+                          },
+                          "bestEpoch": {
+                            "type": "integer",
+                            "description": "The epoch with the lowest validation loss, 1-based.",
+                            "minimum": 1
+                          },
+                          "bestValidationLoss": {"type": "number", "minimum": 0},
+                          "restoredBestAdapter": {
+                            "type": "boolean",
+                            "description": "Whether the published artifact is the best epoch's adapter or the last epoch's. The two are different artifacts and the file manifest cannot tell them apart, so the answer has to be stated here. `false` is the ordinary case and stays expressible.",
+                            "type": "boolean"
+                          },
+                          "lrSchedulerType": {"type": "string", "enum": ["constant", "linear", "cosine"]},
+                          "warmupSteps": {
+                            "type": "integer",
+                            "description": "The EFFECTIVE warmup in optimizer steps, already resolved from whichever spelling the job used. A ratio is not carried here: two readers dividing it by a step count they each derived is how the same run acquires two warmup lengths.",
+                            "minimum": 0
+                          },
+                          "weightDecay": {"type": "number", "minimum": 0, "maximum": 1}
+                        },
+                        "required": [
+                          "stoppingReason",
+                          "epochsCompleted",
+                          "bestEpoch",
+                          "bestValidationLoss",
+                          "restoredBestAdapter",
+                          "lrSchedulerType",
+                          "warmupSteps",
+                          "weightDecay"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [

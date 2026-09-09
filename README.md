@@ -10,9 +10,15 @@ registry entry and, at most, a narrow backend hook.
 
 | Repo | Role |
 |---|---|
-| **language-model-pipeline** (this one) | Contracts, schemas, model registry, shared package, deployment/runtime documentation |
-| `language-model-dataset-validator` | DIMER-facing `validate.py`; upload validation and dataset normalization |
-| `language-model-finetuner` | DIMER-facing `train.py`; LoRA/QLoRA SFT, artifact and provenance generation, and the root `dimer-pipeline.json` |
+| **language-model-pipeline** (this one, public) | Contracts, schemas, model registry, shared package, deployment/runtime documentation |
+| `language-model-dataset-validator` (private) | DIMER-facing `validate.py`; upload validation and dataset normalization |
+| `language-model-finetuner` (private) | DIMER-facing `train.py`; LoRA/QLoRA SFT, artifact and provenance generation, and the root `dimer-pipeline.json` |
+
+Only this canonical contract repository is public at present. The validator and finetuner are
+private deployment repositories; their names and issue references document the architecture and
+implementation provenance, but external readers cannot independently inspect those repositories.
+The contracts, schemas, registry, acceptance definitions, and platform-facing evidence published
+here are therefore the public reference surface for the capability.
 
 ## What lives here
 
@@ -80,16 +86,16 @@ Consequences that survive the correction:
 
 ## Consuming the package
 
-While these repositories are private, DIMER's build has no git credentials in the build
-context (DEPLOYMENT.md §4), so the package is vendored:
+Because the two deployable consumer repositories are private, DIMER's build has no git
+credentials in the build context (DEPLOYMENT.md §4), so the package is currently vendored:
 
 ```bash
 python scripts/vendor_sync.py sync   --into src/_vendor
 python scripts/vendor_sync.py verify --into src/_vendor    # CI gate; non-zero on drift
 ```
 
-When this repo goes public, delete the vendored tree and add a pip requirement instead.
-Import paths do not change.
+If a consumer build is later allowed to install this public package directly, the vendored tree
+can be removed and replaced with a pinned package/VCS requirement. Import paths do not change.
 
 ## Base model weights
 
@@ -122,6 +128,13 @@ python -m venv .venv
 ./.venv/Scripts/python.exe -m pytest
 ./.venv/Scripts/python.exe -m ruff check .
 ```
+
+## License
+
+Project-authored source code and documentation in this repository are licensed under the
+Apache License 2.0; see [`LICENSE`](LICENSE). Third-party model assets and metadata retain their
+applicable upstream licenses and notices, including license material stored alongside approved
+model snapshots under `weights/`.
 
 ## End-to-end acceptance runs
 

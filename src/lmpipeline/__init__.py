@@ -13,6 +13,12 @@ version in both consumer repos in the same change.
 from __future__ import annotations
 
 from .errors import Code, ConfigError, DatasetError, ModelError, PipelineError, Stage
+from .licenses import (
+    INCLUDE_APPLICABLE_LICENSE_NOTICE,
+    PRESERVE_LLAMA_ATTRIBUTION,
+    license_notice_markdown,
+    obligations_for_license,
+)
 from .registry import ModelEntry, ModelRegistry
 from .result import Check, Result, write_result
 from .training_controls import (
@@ -27,12 +33,14 @@ from .training_controls import (
 
 __version__ = "0.1.0"
 
-CONTRACT_VERSION = "1.1"
+CONTRACT_VERSION = "1.2"
 
 __all__ = [
     "CONTRACT_VERSION",
     "CONTROL_DEFAULTS",
+    "INCLUDE_APPLICABLE_LICENSE_NOTICE",
     "LR_SCHEDULER_TYPES",
+    "PRESERVE_LLAMA_ATTRIBUTION",
     "STOPPING_REASONS",
     "Check",
     "Code",
@@ -44,7 +52,9 @@ __all__ = [
     "PipelineError",
     "Result",
     "Stage",
+    "license_notice_markdown",
     "lower_controls",
+    "obligations_for_license",
     "optimizer_steps_per_epoch",
     "resolve_warmup_steps",
     "total_optimizer_steps",

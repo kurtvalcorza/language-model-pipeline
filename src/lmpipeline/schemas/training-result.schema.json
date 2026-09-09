@@ -81,6 +81,23 @@
                         "description": "The revision actually loaded. A branch name here would make the artifact unreproducible.",
                         "pattern": "^[0-9a-f]{40}$"
                       },
+                      "baseModelLicense": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Upstream license identifier for the exact base model used by the run."
+                      },
+                      "licenseObligations": {
+                        "type": "array",
+                        "description": "Stable machine-readable downstream obligations derived from the reviewed base-model license. An empty list means the pipeline has no additional obligation recorded; it is not a legal conclusion about every possible use.",
+                        "uniqueItems": true,
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "preserve_llama_attribution",
+                            "include_applicable_license_notice"
+                          ]
+                        }
+                      },
                       "modelKey": {"type": "string", "minLength": 1},
                       "quantized": {"type": "boolean"},
                       "datasetDigest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -91,7 +108,7 @@
 
                       "trainingControls": {
                         "type": "object",
-                        "description": "What the training controls DID, as against what the job asked for -- the request is already legible in the embedded job document. Optional, because a finetuner that has not yet gained the controls still emits a valid result; once it emits this block the block must be complete, which is what the inner `required` is for.",
+                        "description": "What the training controls DID, as against what the job asked for -- the request is already legible in the embedded job document. Kept optional so pre-1.1 result fixtures remain schema-readable; the current finetuner emits this block on successful runs.",
                         "properties": {
                           "stoppingReason": {
                             "type": "string",
@@ -111,8 +128,7 @@
                           "bestValidationLoss": {"type": "number", "minimum": 0},
                           "restoredBestAdapter": {
                             "type": "boolean",
-                            "description": "Whether the published artifact is the best epoch's adapter or the last epoch's. The two are different artifacts and the file manifest cannot tell them apart, so the answer has to be stated here. `false` is the ordinary case and stays expressible.",
-                            "type": "boolean"
+                            "description": "Whether the published artifact is the best epoch's adapter or the last epoch's. The two are different artifacts and the file manifest cannot tell them apart, so the answer has to be stated here. `false` is the ordinary case and stays expressible."
                           },
                           "lrSchedulerType": {"type": "string", "enum": ["constant", "linear", "cosine"]},
                           "warmupSteps": {

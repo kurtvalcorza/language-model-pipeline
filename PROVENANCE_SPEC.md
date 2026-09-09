@@ -10,6 +10,7 @@ field is observed after the fact where that is possible.
 | `baseModel`, `baseModelRevision` | The immutable revision actually loaded |
 | `baseModelRevisionExpected` | What the registry pinned; a mismatch fails the run |
 | `baseModelLicense` | Carried from the registry for downstream attribution |
+| `licenseObligations` | Stable machine-readable downstream actions derived from the reviewed base-model license; empty when no extra obligation is recorded |
 | `modelKey`, `backend` | Internal registry identity |
 | `loadedDtype`, `quantized` | What the model was really loaded as, not what was requested |
 | `loraTargetModules` | Resolved against the loaded architecture, not assumed |
@@ -19,6 +20,12 @@ field is observed after the fact where that is possible.
 | `packageVersions` | torch, transformers, peft, accelerate, tokenizers, bitsandbytes |
 | `platform` | System and machine |
 | `dimerBaseModel` | DIMER's Base Model field when the platform supplies it |
+
+`licenseObligations` is policy data, not free-form prose. The current reviewed Llama 3.2
+policy emits `preserve_llama_attribution` and `include_applicable_license_notice`; ordinary
+permissive entries currently emit an empty list. New non-empty mappings require explicit
+license review rather than inference from a license name. The generated `MODEL_CARD.md`
+renders the corresponding human-readable notice when obligations exist.
 
 ## Why "actually loaded" matters
 

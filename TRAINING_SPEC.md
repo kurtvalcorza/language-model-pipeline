@@ -51,12 +51,11 @@ discarded.
 
 ## Training controls
 
-> **Status.** The contract below is defined here — job schema, result provenance and
-> registration defaults — and is **not yet implemented in `language-model-finetuner`**
-> (#54). The schemas accept a document that omits every field in this section for exactly
-> that reason: the contract lands first and the runtime follows, without either step
-> breaking the other. Until the runtime lands, a job document carries no scheduler or
-> early-stopping block and weight decay stays at torch's implicit value.
+The contract below is implemented by `language-model-finetuner`: the registered parameters
+lower into the resolved job document, the runtime applies them during optimization, and the
+training result records their effective behavior in provenance. Defaults reproduce the
+behavior of runs taken before the controls existed, so re-running an existing registration
+does not silently change its optimization policy.
 
 Three controls beyond learning rate and epoch count. Each one **defaults to the behaviour
 of runs taken before it existed**, so re-running an existing registration today produces
@@ -66,8 +65,8 @@ invalidate the measured matrix in `COMPATIBILITY.md` without anyone editing it.
 ### Weight decay
 
 Stated, not inherited. It was previously whatever `torch.optim.AdamW` defaults to — the
-finetuner constructs the optimizer with a learning rate and nothing else — which is
-regularization policy nobody chose and provenance cannot show.
+finetuner constructed the optimizer with a learning rate and nothing else — which made
+regularization policy implicit and absent from provenance.
 
 The documented default is that same value, `0.01`, and it is unchanged for that reason
 rather than as a recommendation. `0.0` is legitimate for LoRA SFT, where dropout already
@@ -92,9 +91,16 @@ becomes the default when a measurement says it should be, not before.
 ### Early stopping
 
 Off unless asked for. When on, validation loss is measured after each epoch exactly as it
-already is; the best epoch is tracked; and the run stops once `patience` consecutive epochs
-fail to beat the best by at least `min_delta`. Patience is spent on epochs, not evaluations,
-because that is the granularity validation is measured at.
+already is. The **best epoch** is always the epoch with the strictly lowest observed
+validation loss, independent of `min_delta`; if `restore_best_adapter=true`, that is the
+adapter selected for publication.
+
+Patience is a separate decision. It resets only when validation loss improves the patience
+reference by at least `min_delta`, and the run stops once `patience` consecutive epochs fail
+to make such an improvement. Keeping selection separate from the patience threshold matters:
+a small but real new validation minimum may be worth restoring even though it is too small
+to reset patience. Patience is spent on epochs, not evaluations, because that is the
+granularity validation is measured at.
 
 `restore_best_adapter` decides **which adapter is published** — the best epoch's or the
 last completed one's. It defaults to false. The two are different artifacts and the file

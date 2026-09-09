@@ -26,10 +26,11 @@ def test_llama_notice_names_the_pinned_base_and_required_actions():
     notice = license_notice_markdown(
         "llama3.2", "meta-llama/Llama-3.2-3B-Instruct"
     )
-    assert "meta-llama/Llama-3.2-3B-Instruct" in notice
-    assert "Meta Llama 3.2 Community" in notice
-    assert "preserve the applicable Meta Llama attribution" in notice
-    assert "include the applicable Llama 3.2 license notice" in notice
+    normalized = " ".join(notice.split())
+    assert "meta-llama/Llama-3.2-3B-Instruct" in normalized
+    assert "Meta Llama 3.2 Community" in normalized
+    assert "preserve the applicable Meta Llama attribution" in normalized
+    assert "include the applicable Llama 3.2 license notice" in normalized
 
 
 def test_no_extra_notice_is_invented_for_apache_models():

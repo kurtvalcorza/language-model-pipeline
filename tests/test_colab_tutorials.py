@@ -11,6 +11,7 @@ MAIN = VALIDATOR["MAIN"]
 code_text = VALIDATOR["code_text"]
 load_notebook = VALIDATOR["load_notebook"]
 markdown_text = VALIDATOR["markdown_text"]
+repository_pin = VALIDATOR["repository_pin"]
 validate_member_path = VALIDATOR["validate_member_path"]
 validate_notebooks = VALIDATOR["validate_notebooks"]
 
@@ -58,76 +59,81 @@ def test_member_path_accepts_contained_members(member):
     assert str(validate_member_path(member)) == member
 
 
-def test_validator_is_code_cell_scoped():
+def test_normative_profiles_are_declared_in_metadata_and_markdown():
+    main = load_notebook(MAIN)
+    inference = load_notebook(INFERENCE)
+    assert main["metadata"]["dimer"] == {
+        "notebook_profile": "E2E",
+        "notebook_spec_version": "1.0",
+    }
+    assert inference["metadata"]["dimer"] == {
+        "notebook_profile": "ARTIFACT-INFERENCE",
+        "notebook_spec_version": "1.0",
+    }
+    assert "**Profile:** `E2E`" in markdown_text(main)
+    assert "**Profile:** `ARTIFACT-INFERENCE`" in markdown_text(inference)
+
+
+def test_notebooks_use_repository_api_not_parallel_core_implementations():
+    for path in (MAIN, INFERENCE):
+        code = code_text(load_notebook(path))
+        assert "from lmpipeline.tutorial_api import" in code
+        assert "TUTORIAL_REGISTRY" not in code
+        assert "AutoModelForCausalLM" not in code
+        assert "get_peft_model" not in code
+        assert "PeftModel.from_pretrained" not in code
+
+
+def test_both_notebooks_install_same_immutable_repository_revision():
+    main_pin = repository_pin(load_notebook(MAIN), label="main")
+    inference_pin = repository_pin(load_notebook(INFERENCE), label="inference")
+    assert len(main_pin) == 40
+    assert main_pin == inference_pin
+
+
+def test_finetuning_uses_user_facing_default_and_real_byod_path():
     notebook = load_notebook(MAIN)
     code = code_text(notebook)
-    assert "build_masked_example" in code
-    assert "RUN_NEW_PROMPT_INFERENCE" in code
+    markdown = markdown_text(notebook)
+    assert 'BASE_MODEL_KEY = "qwen3-1.7b"' in code
+    assert 'DATA_SOURCE = "Sample: Filipino SFT"' in code
+    assert '"Bring Your Own Dataset"' in code
+    assert "resolve_dataset" in code
+    assert "load_examples" in code
+    assert "BYOD privacy boundary" in markdown
+    assert "Do not upload confidential" in markdown
 
 
-def test_qwen06b_is_default_and_llama_is_selectable():
+def test_finetuning_seeds_before_model_construction_and_exports_outputs():
     code = code_text(load_notebook(MAIN))
-    assert 'BASE_MODEL_KEY = "qwen3-0.6b"' in code
-    assert '"qwen3-0.6b"' in code
-    assert '"smollm3-3b"' in code
-    assert '"llama-3.2-3b-instruct"' in code
-    assert '"meta-llama/Llama-3.2-3B-Instruct"' in code
+    assert code.index("seed_everything(SEED)") < code.index("load_base_model(")
+    assert "tutorial_predictions.jsonl" in code
+    assert "tutorial_metrics.json" in code
+    assert "export_adapter_bundle" in code
+    assert "load_adapter_for_inference" in code
 
 
-def test_hf_secret_is_read_but_never_printed():
-    code = code_text(load_notebook(MAIN))
-    assert 'userdata.get("HF_TOKEN")' in code
-    assert 'print(HF_TOKEN)' not in code
-    assert '"HF_TOKEN": HF_TOKEN' not in code
+def test_artifact_inference_is_external_and_has_real_new_input_and_export():
+    notebook = load_notebook(INFERENCE)
+    code = code_text(notebook)
+    markdown = markdown_text(notebook)
+    assert "files.upload()" in code
+    assert "consume_adapter_archive" in code
+    assert "CUSTOM_PROMPT" in code
+    assert "validate_prompt" in code
+    assert "artifact_inference_predictions.jsonl" in code
+    assert "artifact_inference_provenance.json" in code
+    assert "externally supplied PEFT adapter ZIP" in markdown
+    assert "sender authenticity" in markdown
 
 
-def test_dimer_zip_requires_identity_manifest():
-    code = code_text(load_notebook(MAIN))
-    assert '"dimer-base-manifest.json"' in code
-    assert '"dimer_hf_snapshot"' in code
-    assert "modelId" in code
-    assert "revision" in code
-    assert "sha256" in code
-
-
-def test_llama_dimer_zip_is_not_assumed_redistributable():
-    code = code_text(load_notebook(MAIN))
-    llama_start = code.index('"llama-3.2-3b-instruct"')
-    llama_block = code[llama_start : llama_start + 1200]
-    assert '"dimer_zip":False' in llama_block
-
-
-def test_training_method_form_is_not_integer_widget():
-    code = code_text(load_notebook(MAIN))
-    training_lines = [
-        line for line in code.splitlines()
-        if line.strip().startswith("TRAINING_METHOD")
-    ]
-    assert len(training_lines) == 1
-    line = training_lines[0]
-    assert '# @param ["qlora"]' in line
-    assert 'type:"integer"' not in line
-
-
-def test_tutorial_markdown_is_substantive():
-    markdown = markdown_text(load_notebook(MAIN))
-    assert "What you will learn" in markdown
-    assert "For **Llama 3.2 3B Instruct**" in markdown
-    assert "What a successful run proves" in markdown
-    assert len(markdown.split()) > 900
-
-
-def test_inference_notebook_supports_hf_secret_and_dimer_zip():
+def test_artifact_inference_requires_runtime_and_registry_parity():
     code = code_text(load_notebook(INFERENCE))
-    assert 'userdata.get("HF_TOKEN")' in code
-    assert 'BASE_MODEL_SOURCE = "Pinned Hugging Face"' in code
-    assert '"dimer-base-manifest.json"' in code
-    assert "PeftModel.from_pretrained" in code
+    assert "assert_runtime_compatible(PROVENANCE, RUNTIME)" in code
+    assert "resolve_artifact_model(PROVENANCE)" in code
 
 
-def test_no_training_rows_written_to_artifact_code():
-    code = code_text(load_notebook(MAIN))
-    # Artifact publication should serialize model/tokenizer/metrics/provenance, not SPLITS.
-    artifact_section = code[code.index('Path("/content/dimer-lm-adapter.staging")') :]
-    assert 'write_text(json.dumps(SPLITS' not in artifact_section
-    assert 'json.dump(SPLITS' not in artifact_section
+def test_notebooks_do_not_claim_static_validation_is_runtime_evidence():
+    for path in (MAIN, INFERENCE):
+        markdown = markdown_text(load_notebook(path)).lower()
+        assert "static checks prove execution" not in markdown

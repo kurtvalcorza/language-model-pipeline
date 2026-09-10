@@ -32,12 +32,18 @@ PRIVATE_SOURCE_MARKERS = (
     "del _GITHUB_TOKEN",
 )
 
+# Validate ownership boundaries semantically rather than depending on Black/Ruff import
+# wrapping. Both `from module import x` and `from module import (x, ...)` are valid and
+# exercise the same production surface.
 MAIN_MARKERS = (
-    "from finetuner.artifacts import build_provenance, stage_artifact, verify_manifest",
-    "from finetuner.backends import (",
+    "from finetuner.artifacts import",
+    "build_provenance",
+    "stage_artifact",
+    "verify_manifest",
+    "from finetuner.backends import",
     "from finetuner.config import TrainingConfig",
-    "from finetuner.data import (",
-    "from finetuner.inference import (",
+    "from finetuner.data import",
+    "from finetuner.inference import",
     "from finetuner.masking import build_masked_example",
     "from finetuner.training import train",
     "load_normalized_splits",
@@ -56,8 +62,9 @@ MAIN_MARKERS = (
 )
 
 INFERENCE_MARKERS = (
-    "from lmpipeline.tutorial_runtime import consume_adapter_archive",
-    "from finetuner.inference import (",
+    "from lmpipeline.tutorial_runtime import",
+    "consume_adapter_archive",
+    "from finetuner.inference import",
     "load_adapter_for_inference(",
     "generate_reply(",
     "verify_adapter_active(",

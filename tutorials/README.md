@@ -48,11 +48,11 @@ The fine-tuning tutorial is structured as an in-depth pedagogical guide rather t
 
 ### 3. Assistant-Only Loss Masking
 - How computing cross-entropy loss over entire sequences causes models to waste capacity memorizing user prompts.
-- How the notebook locates assistant turns inside the rendered conversation with the tokenizer's character offsets, assigns every other token the label `-100` (PyTorch `ignore_index`), and prints one example with the supervised tokens marked so you can see exactly what is learned: the answer text and its end-of-turn marker, but not the user turn, the role markers, or Qwen3's `<think>` scaffold (which the template supplies at inference).
+- How the notebook locates assistant turns inside the rendered conversation with the tokenizer's character offsets, assigns every other token the label `-100` (PyTorch `ignore_index`), and prints one example with the supervised tokens marked so you can see exactly what is learned: the answer text and its end-of-turn marker, but not the user turn or role markers. For Qwen3 alternatives, the non-thinking scaffold supplied by the template is excluded as well.
 - Why gradients should only update parameters based on the assistant's predicted response tokens.
 
 ### 4. 4-bit Quantization (QLoRA)
-- How loading base model weights in 4-bit NormalFloat (`nf4`) with double quantization cuts weight memory roughly four-fold versus 16-bit (the default run peaks at a measured 1.52 GiB of allocated GPU memory, weights, activations and optimizer state included).
+- How loading base model weights in 4-bit NormalFloat (`nf4`) with double quantization cuts weight memory roughly four-fold versus 16-bit. The default SmolLM2-360M model keeps the walkthrough compact; measured Qwen3-0.6B results remain documented as a reference point below.
 - How standard 16-bit fine-tuning of 3B+ models requires >24 GB VRAM, whereas QLoRA dramatically reduces memory footprints—measured at 1.52 GiB peak allocated VRAM for Qwen3-0.6B (≤512 tokens, SDPA) on a Tesla T4, and estimated at 6 GB to 10 GB for 3B–4B models at standard conversational lengths (≤512 tokens) based on scaling from sequence-length 2048 measurements (9.3 GiB for Qwen3-1.7B, 11.5 GiB for Qwen3-4B). Note that activation memory scales super-linearly with sequence length—longer contexts (1k–2k+ tokens) require larger GPU memory allocations.
 
 ### 5. Recommended Hyperparameters & Configuration
@@ -67,7 +67,7 @@ The fine-tuning tutorial is structured as an in-depth pedagogical guide rather t
 - Why prompt probes before and after training illustrate behavioral shifts but do not constitute formal evaluation.
 
 ### 7. Adapter-First Export and Clean Reload
-- Why exporting only the low-rank delta matrices and tokenizer files (36 MB for the default 0.6B model at rank 8; a few tens of megabytes for the larger registry models) is dramatically more portable than exporting redundant multi-gigabyte base model copies.
+- Why exporting only the low-rank delta matrices and tokenizer files is dramatically more portable than exporting redundant base model copies.
 - How an `artifact-manifest.json` tracks byte counts and SHA-256 digests for all exported files.
 - Why a fresh reload from disk—clearing memory, reloading the base model, attaching the saved adapter, and checking that it reproduces the in-memory model's answer—is the minimum proof that the bundle is usable. It is not proof of task quality; that needs your own held-out evaluation.
 
@@ -79,7 +79,7 @@ The tutorial includes a curated collection of verified, open-weights causal lang
 
 | Model Key | Parameters | Primary Strengths & Characteristics | License |
 |---|---|---|---|
-| **`qwen3-0.6b`** | 0.6B | **Default tutorial candidate.** Ultra-fast download (~1.41 GiB) and rapid, lightweight training loop verified on Colab-class hardware (measured on Tesla T4: **52.7 s** training loop, **1.52 GiB** peak allocated VRAM, **~3.5 min** whole-notebook execution). Ideal for quick pedagogical walkthroughs and pipeline verification without runtime timeouts. | Apache-2.0 |
+| **`qwen3-0.6b`** | 0.6B | Ultra-fast download (~1.41 GiB) and rapid, lightweight training loop verified on Colab-class hardware (measured on Tesla T4: **52.7 s** training loop, **1.52 GiB** peak allocated VRAM, **~3.5 min** whole-notebook execution). A useful Qwen3 alternative when demonstrating direct/non-thinking answer mode. | Apache-2.0 |
 | **`qwen3-1.7b`** | 1.7B | Strong conversational reasoning, multi-turn instruction following, and measured QLoRA memory profile (9.3 GiB at seq 2048; shorter sequences substantially reduce activation memory). | Apache-2.0 |
 | **`qwen3-4b`** | 4.0B | High-capacity reasoning and knowledge retrieval; suitable for larger GPUs (>=12 GB VRAM). | Apache-2.0 |
 | **`smollm3-3b`** | 3.0B | Balanced modern 3B architecture from Hugging Face TB. | Apache-2.0 |
@@ -88,7 +88,7 @@ The tutorial includes a curated collection of verified, open-weights causal lang
 | **`deepseek-r1-distill-qwen-1.5b`** | 1.8B | Open reasoning specialist distilled from DeepSeek-R1; outputs step-by-step `<think>...</think>` traces. | MIT |
 | **`qwen2.5-coder-1.5b`** | 1.5B | Dedicated code and structured JSON/SQL generation specialist. | Apache-2.0 |
 | **`smollm2-1.7b`** | 1.7B | Lightweight model trained on curated educational corpora (Cosmopedia v2, FineWeb-Edu). | Apache-2.0 |
-| **`smollm2-360m`** | 360M | Ultra-compact edge architecture (~720 MiB); trains in seconds even on resource-limited hardware. | Apache-2.0 |
+| **`smollm2-360m`** | 360M | **Default tutorial candidate.** Ultra-compact instruction-tuned model chosen for quick pedagogical walkthroughs and low-cost pipeline verification. | Apache-2.0 |
 | **`h2o-danube3-4b-chat`** | 4.0B | Mobile- and edge-optimized architecture developed by H2O.ai. (Note: chat template does not support a separate `system` role; the tutorial automatically folds system instructions into the first user turn if present.) | Apache-2.0 |
 | **`llama-3.2-3b-instruct`** | 3.2B | Gated community model. Demonstrates authenticated Colab Secrets (`HF_TOKEN`) workflow. | Llama 3.2 Community |
 

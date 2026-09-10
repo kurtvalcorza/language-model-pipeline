@@ -305,9 +305,13 @@ def validate_notebooks() -> None:
     ):
         code = code_text(notebook)
         if f'PIPELINE_RUNTIME_REVISION = "{pipeline}"' not in code:
-            raise AssertionError(f"{label}: pipeline runtime provenance does not match install pin")
+            raise AssertionError(
+                f"{label}: pipeline runtime provenance does not match install pin"
+            )
         if f'FINETUNER_RUNTIME_REVISION = "{finetuner}"' not in code:
-            raise AssertionError(f"{label}: finetuner runtime provenance does not match checkout pin")
+            raise AssertionError(
+                f"{label}: finetuner runtime provenance does not match checkout pin"
+            )
 
 
 if __name__ == "__main__":

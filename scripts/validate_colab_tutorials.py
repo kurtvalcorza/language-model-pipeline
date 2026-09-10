@@ -17,15 +17,20 @@ MAIN = TUTORIALS / "language_model_finetuning_colab.ipynb"
 INFERENCE = TUTORIALS / "language_model_artifact_inference_colab.ipynb"
 LOCK = TUTORIALS / "requirements-colab.lock"
 TUTORIAL_API = ROOT / "src" / "lmpipeline" / "tutorial_api.py"
+TUTORIAL_RUNTIME = ROOT / "src" / "lmpipeline" / "tutorial_runtime.py"
 SPEC_VERSION = "1.0"
 
 PIPELINE_PIN = re.compile(
     r"git\+https://github\.com/kurtvalcorza/language-model-pipeline\.git@([0-9a-f]{40})"
 )
-FINETUNER_PIN = re.compile(
-    r"git -C /content/language-model-finetuner checkout -q ([0-9a-f]{40})"
-)
+FINETUNER_PIN = re.compile(r'FINETUNER_RUNTIME_REVISION = "([0-9a-f]{40})"')
 PLACEHOLDERS = re.compile(r"\b(?:TODO|TBD|FIXME)\b", re.IGNORECASE)
+
+PRIVATE_SOURCE_MARKERS = (
+    "github_token_from_runtime(",
+    "checkout_private_finetuner(",
+    "del _GITHUB_TOKEN",
+)
 
 MAIN_MARKERS = (
     "from finetuner.artifacts import build_provenance, stage_artifact, verify_manifest",
@@ -46,9 +51,12 @@ MAIN_MARKERS = (
     "CUSTOM_PROMPT",
     "tutorial_predictions.jsonl",
     'PROVENANCE["runtimeRevisions"]',
+    '"safetensors"',
+    *PRIVATE_SOURCE_MARKERS,
 )
 
 INFERENCE_MARKERS = (
+    "from lmpipeline.tutorial_runtime import consume_adapter_archive",
     "from finetuner.inference import (",
     "load_adapter_for_inference(",
     "generate_reply(",
@@ -61,6 +69,7 @@ INFERENCE_MARKERS = (
     "artifact_inference_predictions.jsonl",
     "artifact_inference_provenance.json",
     "RECORDED_RUNTIME_REVISIONS",
+    *PRIVATE_SOURCE_MARKERS,
 )
 
 FORBIDDEN_NOTEBOOK_CORE = (
@@ -85,7 +94,15 @@ FORBIDDEN_EXECUTION = (
     "torch.load(",
 )
 
-FORBIDDEN_TUTORIAL_API_CORE_DEFS = (
+FORBIDDEN_PRIVATE_SOURCE_PATTERNS = (
+    "!git clone -q https://github.com/kurtvalcorza/language-model-finetuner.git",
+    "https://x-access-token:",
+    "https://${GITHUB_TOKEN}@",
+    "print(_GITHUB_TOKEN)",
+    "print(GITHUB_TOKEN)",
+)
+
+FORBIDDEN_SUPPORT_CORE_DEFS = (
     "def train_adapter(",
     "def load_base_model(",
     "def attach_adapter(",
@@ -185,14 +202,28 @@ def assert_no_parallel_implementation(notebook: dict, *, label: str) -> None:
         raise AssertionError(f"{label}: forbidden executable/deserialization markers: {dangerous}")
 
 
-def assert_tutorial_api_is_support_only() -> None:
-    text = TUTORIAL_API.read_text(encoding="utf-8")
-    present = [marker for marker in FORBIDDEN_TUTORIAL_API_CORE_DEFS if marker in text]
-    if present:
-        raise AssertionError(
-            "lmpipeline.tutorial_api must remain notebook support, not a parallel trainer: "
-            f"{present}"
-        )
+def assert_secure_private_source(notebook: dict, *, label: str) -> None:
+    code = code_text(notebook)
+    forbidden = [marker for marker in FORBIDDEN_PRIVATE_SOURCE_PATTERNS if marker in code]
+    if forbidden:
+        raise AssertionError(f"{label}: insecure private-source bootstrap markers: {forbidden}")
+    assert_markers(code, PRIVATE_SOURCE_MARKERS, label=f"{label} private source")
+    markdown = markdown_text(notebook)
+    assert_markers(
+        markdown,
+        ("GITHUB_TOKEN", "read access", "private `language-model-finetuner`"),
+        label=f"{label} private-source prerequisites",
+    )
+
+
+def assert_support_modules_are_orchestration_only() -> None:
+    for path in (TUTORIAL_API, TUTORIAL_RUNTIME):
+        text = path.read_text(encoding="utf-8")
+        present = [marker for marker in FORBIDDEN_SUPPORT_CORE_DEFS if marker in text]
+        if present:
+            raise AssertionError(
+                f"{path.name} must remain notebook support, not a parallel trainer: {present}"
+            )
 
 
 def assert_colab_param_annotations(notebook: dict, *, label: str) -> None:
@@ -248,10 +279,9 @@ def assert_learning_contract(main: dict, inference: dict) -> None:
     assert_markers(
         markdown_text(main),
         (
-            "production `finetuner.data`",
-            "production masking implementation",
+            "production data",
             "optimization evidence",
-            "BYOD privacy boundary",
+            "Private production source",
             "runtime-source revisions",
             "does **not** establish",
         ),
@@ -262,7 +292,6 @@ def assert_learning_contract(main: dict, inference: dict) -> None:
         (
             "externally supplied PEFT adapter ZIP",
             "No training or fine-tuning occurs",
-            "Trust boundary",
             "sender authenticity",
             "production inference surface",
             "runtime-source revisions",
@@ -278,12 +307,13 @@ def validate_notebooks() -> None:
     assert_profile(main, "E2E", label="main")
     assert_profile(inference, "ARTIFACT-INFERENCE", label="inference")
     assert_lock_is_exact()
-    assert_tutorial_api_is_support_only()
+    assert_support_modules_are_orchestration_only()
 
     for label, notebook in (("main", main), ("inference", inference)):
         assert_clean_notebook(notebook, label=label)
         compile_code_cells(notebook, label=label)
         assert_no_parallel_implementation(notebook, label=label)
+        assert_secure_private_source(notebook, label=label)
         assert_colab_param_annotations(notebook, label=label)
 
     assert_markers(code_text(main), MAIN_MARKERS, label="main")

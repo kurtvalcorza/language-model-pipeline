@@ -110,6 +110,20 @@ def test_both_notebooks_pin_same_pipeline_and_finetuner_revisions():
     assert main_finetuner == inference_finetuner
 
 
+def test_private_finetuner_bootstrap_is_explicit_and_secret_safe():
+    for path in (MAIN, INFERENCE):
+        notebook = load_notebook(path)
+        code = code_text(notebook)
+        markdown = markdown_text(notebook)
+        assert "github_token_from_runtime()" in code
+        assert "checkout_private_finetuner(" in code
+        assert "del _GITHUB_TOKEN" in code
+        assert "!git clone -q https://github.com/kurtvalcorza/language-model-finetuner.git" not in code
+        assert "https://x-access-token:" not in code
+        assert "GITHUB_TOKEN" in markdown
+        assert "read access" in markdown
+
+
 def test_finetuning_uses_user_facing_default_and_real_byod_path():
     notebook = load_notebook(MAIN)
     code = code_text(notebook)
@@ -119,7 +133,7 @@ def test_finetuning_uses_user_facing_default_and_real_byod_path():
     assert '"Bring Your Own Dataset"' in code
     assert "load_normalized_splits" in code
     assert "dataset_digest" in code
-    assert "BYOD privacy boundary" in markdown
+    assert "Private production source" in markdown
     assert "Do not place confidential" in markdown
 
 
@@ -134,10 +148,17 @@ def test_finetuning_seeds_before_model_construction_and_exports_outputs():
 
 def test_fresh_reconstruction_proves_adapter_activity():
     code = code_text(load_notebook(MAIN))
-    markdown = markdown_text(load_notebook(MAIN))
+    markdown = markdown_text(load_notebook(MAIN)).lower()
     assert "verify_adapter_active(" in code
-    assert "LoRA B matrices" in markdown
-    assert "Adapter-on logits differ" in markdown
+    assert "lora b matrices" in markdown
+    assert "adapter-on logits differ" in markdown
+
+
+def test_e2e_asserts_consumer_required_package_provenance():
+    code = code_text(load_notebook(MAIN))
+    assert '"safetensors"' in code
+    assert 'PROVENANCE["packageVersions"]' in code
+    assert "missing_versions" in code
 
 
 def test_artifact_inference_is_external_and_has_real_new_input_and_export():
@@ -145,13 +166,14 @@ def test_artifact_inference_is_external_and_has_real_new_input_and_export():
     code = code_text(notebook)
     markdown = markdown_text(notebook)
     assert "files.upload()" in code
-    assert "consume_adapter_archive" in code
+    assert "from lmpipeline.tutorial_runtime import consume_adapter_archive" in code
     assert "CUSTOM_PROMPT" in code
     assert "validate_prompt" in code
     assert "artifact_inference_predictions.jsonl" in code
     assert "artifact_inference_provenance.json" in code
     assert "externally supplied PEFT adapter ZIP" in markdown
     assert "sender authenticity" in markdown
+    assert "artifact-manifest.json` at the ZIP root" in markdown
 
 
 def test_artifact_inference_requires_registry_package_and_source_parity():

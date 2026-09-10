@@ -9,6 +9,7 @@ VALIDATOR = run_path(
 INFERENCE = VALIDATOR["INFERENCE"]
 MAIN = VALIDATOR["MAIN"]
 code_text = VALIDATOR["code_text"]
+finetuner_pin = VALIDATOR["finetuner_pin"]
 load_notebook = VALIDATOR["load_notebook"]
 markdown_text = VALIDATOR["markdown_text"]
 repository_pin = VALIDATOR["repository_pin"]
@@ -74,21 +75,39 @@ def test_normative_profiles_are_declared_in_metadata_and_markdown():
     assert "**Profile:** `ARTIFACT-INFERENCE`" in markdown_text(inference)
 
 
-def test_notebooks_use_repository_api_not_parallel_core_implementations():
-    for path in (MAIN, INFERENCE):
-        code = code_text(load_notebook(path))
-        assert "from lmpipeline.tutorial_api import" in code
-        assert "TUTORIAL_REGISTRY" not in code
-        assert "AutoModelForCausalLM" not in code
-        assert "get_peft_model" not in code
-        assert "PeftModel.from_pretrained" not in code
+def test_e2e_notebook_imports_real_finetuner_components():
+    code = code_text(load_notebook(MAIN))
+    for marker in (
+        "from finetuner.artifacts import",
+        "from finetuner.backends import",
+        "from finetuner.config import TrainingConfig",
+        "from finetuner.data import",
+        "from finetuner.inference import",
+        "from finetuner.masking import build_masked_example",
+        "from finetuner.training import train",
+    ):
+        assert marker in code
+    for forbidden in (
+        "AutoModelForCausalLM",
+        "get_peft_model",
+        "PeftModel.from_pretrained",
+        "def train(",
+        "def generate_reply(",
+    ):
+        assert forbidden not in code
 
 
-def test_both_notebooks_install_same_immutable_repository_revision():
-    main_pin = repository_pin(load_notebook(MAIN), label="main")
-    inference_pin = repository_pin(load_notebook(INFERENCE), label="inference")
-    assert len(main_pin) == 40
-    assert main_pin == inference_pin
+def test_both_notebooks_pin_same_pipeline_and_finetuner_revisions():
+    main = load_notebook(MAIN)
+    inference = load_notebook(INFERENCE)
+    main_pipeline = repository_pin(main, label="main")
+    inference_pipeline = repository_pin(inference, label="inference")
+    main_finetuner = finetuner_pin(main, label="main")
+    inference_finetuner = finetuner_pin(inference, label="inference")
+    assert len(main_pipeline) == 40
+    assert len(main_finetuner) == 40
+    assert main_pipeline == inference_pipeline
+    assert main_finetuner == inference_finetuner
 
 
 def test_finetuning_uses_user_facing_default_and_real_byod_path():
@@ -98,10 +117,10 @@ def test_finetuning_uses_user_facing_default_and_real_byod_path():
     assert 'BASE_MODEL_KEY = "qwen3-1.7b"' in code
     assert 'DATA_SOURCE = "Sample: Filipino SFT"' in code
     assert '"Bring Your Own Dataset"' in code
-    assert "resolve_dataset" in code
-    assert "load_examples" in code
+    assert "load_normalized_splits" in code
+    assert "dataset_digest" in code
     assert "BYOD privacy boundary" in markdown
-    assert "Do not upload confidential" in markdown
+    assert "Do not place confidential" in markdown
 
 
 def test_finetuning_seeds_before_model_construction_and_exports_outputs():
@@ -109,8 +128,16 @@ def test_finetuning_seeds_before_model_construction_and_exports_outputs():
     assert code.index("seed_everything(SEED)") < code.index("load_base_model(")
     assert "tutorial_predictions.jsonl" in code
     assert "tutorial_metrics.json" in code
-    assert "export_adapter_bundle" in code
+    assert "stage_artifact" in code
     assert "load_adapter_for_inference" in code
+
+
+def test_fresh_reconstruction_proves_adapter_activity():
+    code = code_text(load_notebook(MAIN))
+    markdown = markdown_text(load_notebook(MAIN))
+    assert "verify_adapter_active(" in code
+    assert "LoRA B matrices" in markdown
+    assert "Adapter-on logits differ" in markdown
 
 
 def test_artifact_inference_is_external_and_has_real_new_input_and_export():
@@ -127,10 +154,13 @@ def test_artifact_inference_is_external_and_has_real_new_input_and_export():
     assert "sender authenticity" in markdown
 
 
-def test_artifact_inference_requires_runtime_and_registry_parity():
+def test_artifact_inference_requires_registry_package_and_source_parity():
     code = code_text(load_notebook(INFERENCE))
     assert "assert_runtime_compatible(PROVENANCE, RUNTIME)" in code
     assert "resolve_artifact_model(PROVENANCE)" in code
+    assert "RECORDED_RUNTIME_REVISIONS" in code
+    assert "PIPELINE_RUNTIME_REVISION" in code
+    assert "FINETUNER_RUNTIME_REVISION" in code
 
 
 def test_notebooks_do_not_claim_static_validation_is_runtime_evidence():

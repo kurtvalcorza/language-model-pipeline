@@ -108,6 +108,7 @@ def test_both_notebooks_pin_same_pipeline_and_finetuner_revisions():
     assert len(main_finetuner) == 40
     assert main_pipeline == inference_pipeline
     assert main_finetuner == inference_finetuner
+    assert main_finetuner == "3772f0ca4e0f7130ffd5f826ea40f43b7212339e"
 
 
 def test_private_finetuner_bootstrap_is_explicit_and_secret_safe():
@@ -138,13 +139,14 @@ def test_finetuning_uses_user_facing_default_and_real_byod_path():
     assert "load_normalized_splits" in code
     assert "dataset_digest" in code
     assert "Private production source" in markdown
-    assert "Do not place confidential" in markdown
+    assert "do not upload confidential" in markdown.lower()
 
 
 def test_finetuning_seeds_before_model_construction_and_exports_outputs():
     code = code_text(load_notebook(MAIN))
     assert code.index("seed_everything(SEED)") < code.index("load_base_model(")
     assert "tutorial_predictions.jsonl" in code
+    assert "tutorial_predictions.csv" in code
     assert "tutorial_metrics.json" in code
     assert "stage_artifact" in code
     assert "load_adapter_for_inference" in code
@@ -155,14 +157,41 @@ def test_fresh_reconstruction_proves_adapter_activity():
     markdown = markdown_text(load_notebook(MAIN)).lower()
     assert "verify_adapter_active(" in code
     assert "lora b matrices" in markdown
-    assert "adapter-on logits differ" in markdown
+    assert "adapter-on/off logit" in markdown
 
 
 def test_e2e_asserts_consumer_required_package_provenance():
     code = code_text(load_notebook(MAIN))
     assert '"safetensors"' in code
     assert 'PROVENANCE["packageVersions"]' in code
-    assert "missing_versions" in code
+    assert "Producer provenance missing package versions" in code
+
+
+def test_e2e_explains_principal_metrics_and_adapter_dependency():
+    markdown = markdown_text(load_notebook(MAIN))
+    for marker in (
+        "trainLoss",
+        "validationLoss",
+        "testLoss",
+        "trainPerplexity",
+        "examplesPerSecond",
+        "peakGpuMemoryBytes",
+        "optimization evidence",
+        "PEFT adapter, not a complete model",
+        "exact base model and immutable revision",
+    ):
+        assert marker in markdown
+
+
+def test_versioned_manifest_is_produced_and_consumed():
+    main = code_text(load_notebook(MAIN))
+    inference = code_text(load_notebook(INFERENCE))
+    assert 'MANIFEST.get("format")' in main
+    assert 'MANIFEST.get("formatVersion")' in main
+    assert '("peft_adapter", 1)' in main
+    assert 'MANIFEST.get("format")' in inference
+    assert 'MANIFEST.get("formatVersion")' in inference
+    assert '("peft_adapter", 1)' in inference
 
 
 def test_artifact_inference_is_external_and_has_real_new_input_and_export():
@@ -170,14 +199,16 @@ def test_artifact_inference_is_external_and_has_real_new_input_and_export():
     code = code_text(notebook)
     markdown = markdown_text(notebook)
     assert "files.upload()" in code
-    assert "from lmpipeline.tutorial_runtime import consume_adapter_archive" in code
+    assert "from lmpipeline.tutorial_runtime import" in code
+    assert "consume_adapter_archive" in code
     assert "CUSTOM_PROMPT" in code
     assert "validate_prompt" in code
     assert "artifact_inference_predictions.jsonl" in code
+    assert "artifact_inference_predictions.csv" in code
     assert "artifact_inference_provenance.json" in code
     assert "externally supplied PEFT adapter ZIP" in markdown
     assert "sender authenticity" in markdown
-    assert "artifact-manifest.json` at the ZIP root" in markdown
+    assert "root-level manifest" in markdown
 
 
 def test_artifact_inference_requires_registry_package_and_source_parity():
@@ -187,9 +218,20 @@ def test_artifact_inference_requires_registry_package_and_source_parity():
     assert "RECORDED_RUNTIME_REVISIONS" in code
     assert "PIPELINE_RUNTIME_REVISION" in code
     assert "FINETUNER_RUNTIME_REVISION" in code
+    assert "if RECORDED_RUNTIME_REVISIONS:" in code
+
+
+def test_notebooks_include_troubleshooting_next_experiments_and_source_links():
+    for path in (MAIN, INFERENCE):
+        markdown = markdown_text(load_notebook(path)).lower()
+        assert "common failures" in markdown
+        assert "next experiments" in markdown
+        assert "https://github.com/kurtvalcorza/language-model-pipeline" in markdown
+        assert "https://huggingface.co" in markdown
 
 
 def test_notebooks_do_not_claim_static_validation_is_runtime_evidence():
     for path in (MAIN, INFERENCE):
         markdown = markdown_text(load_notebook(path)).lower()
         assert "static checks prove execution" not in markdown
+        assert "static ci is not rel1/rel5 execution evidence" in markdown

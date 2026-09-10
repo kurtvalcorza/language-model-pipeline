@@ -1,14 +1,9 @@
-"""Public execution API for release-grade DIMER language-model tutorials.
+"""Public execution API for DIMER language-model tutorial notebooks.
 
-The notebooks under ``tutorials/`` are executable reference implementations, not a second
-pipeline implementation.  Model resolution and dataset normalization therefore come from the
-same ``lmpipeline`` package used by the DIMER consumers, while model loading, assistant-only
-masking, PEFT attachment, training, generation, artifact packaging, and artifact consumption
-are exposed here as the repository's supported public tutorial API.
-
-Heavy ML dependencies are imported lazily so the shared contract package remains usable by the
-model-agnostic validator.  ``tutorials/requirements-colab.lock`` defines the exact tutorial
-runtime used by this module.
+Release-grade notebooks call this module instead of carrying a second implementation of model
+resolution, dataset normalization, assistant-only masking, QLoRA setup, training, generation,
+and artifact handling. Heavy ML imports stay lazy so the shared contract package remains usable
+by the model-agnostic validator.
 """
 
 from __future__ import annotations
@@ -17,9 +12,9 @@ import hashlib
 import importlib.metadata
 import json
 import math
-import os
 import platform
 import random
+import re
 import shutil
 import stat
 import time
@@ -33,9 +28,6 @@ from .errors import Code, DatasetError, ModelError, ResourceError
 from .registry import ModelEntry, ModelRegistry
 
 TUTORIAL_API_VERSION = "1.0"
-
-# Exact user-space versions for the release-grade Colab path.  Torch is accelerator/runtime
-# coupled, so the notebook verifies its base version instead of replacing Colab's CUDA build.
 TUTORIAL_RUNTIME_VERSIONS = {
     "torch": "2.8.0",
     "transformers": "5.16.1",
@@ -50,16 +42,9 @@ TUTORIAL_RUNTIME_VERSIONS = {
     "PyYAML": "6.0.3",
     "Jinja2": "3.1.6",
 }
-
 IGNORE_INDEX = -100
 CANDIDATE_TARGET_MODULES = (
-    "q_proj",
-    "k_proj",
-    "v_proj",
-    "o_proj",
-    "gate_proj",
-    "up_proj",
-    "down_proj",
+    "q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"
 )
 
 
@@ -111,9 +96,7 @@ class TutorialTrainingConfig:
             "loraDropout": self.lora_dropout,
             "perDeviceBatchSize": self.per_device_batch_size,
             "gradientAccumulationSteps": self.gradient_accumulation_steps,
-            "effectiveBatchSize": (
-                self.per_device_batch_size * self.gradient_accumulation_steps
-            ),
+            "effectiveBatchSize": self.per_device_batch_size * self.gradient_accumulation_steps,
             "seed": self.seed,
             "weightDecay": self.weight_decay,
         }
@@ -133,9 +116,7 @@ class TrainingMetrics:
 
     @staticmethod
     def _perplexity(loss: float | None) -> float | None:
-        if loss is None or loss > 20:
-            return None
-        return round(math.exp(loss), 4)
+        return None if loss is None or loss > 20 else round(math.exp(loss), 4)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -163,28 +144,24 @@ class LoadedModel:
     quantized: bool
 
 
-def _installed_version(distribution: str) -> str | None:
+def _installed_version(name: str) -> str | None:
     try:
-        return importlib.metadata.version(distribution)
+        return importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError:
         return None
 
 
 def runtime_identity() -> dict[str, Any]:
-    """Return the runtime identity needed to interpret tutorial evidence."""
     identity: dict[str, Any] = {
         "python": platform.python_version(),
         "tutorialApiVersion": TUTORIAL_API_VERSION,
-        "packages": {
-            name: _installed_version(name) for name in TUTORIAL_RUNTIME_VERSIONS
-        },
+        "packages": {name: _installed_version(name) for name in TUTORIAL_RUNTIME_VERSIONS},
     }
     try:
         import torch
     except ImportError:
         identity["accelerator"] = {"cudaAvailable": False}
         return identity
-
     accelerator: dict[str, Any] = {
         "cudaAvailable": torch.cuda.is_available(),
         "torchBuild": torch.__version__,
@@ -194,9 +171,7 @@ def runtime_identity() -> dict[str, Any]:
         accelerator.update(
             {
                 "device": torch.cuda.get_device_name(0),
-                "vramGiB": round(
-                    torch.cuda.get_device_properties(0).total_memory / 1024**3, 2
-                ),
+                "vramGiB": round(torch.cuda.get_device_properties(0).total_memory / 1024**3, 2),
                 "bf16Supported": bool(torch.cuda.is_bf16_supported()),
             }
         )
@@ -205,20 +180,14 @@ def runtime_identity() -> dict[str, Any]:
 
 
 def assert_tutorial_runtime() -> dict[str, Any]:
-    """Fail clearly when the installed release-grade runtime does not match the lock."""
+    """Verify the exact tutorial lock without replacing the accelerator-coupled Torch wheel."""
     identity = runtime_identity()
     mismatches: list[str] = []
-    installed = identity["packages"]
     for name, expected in TUTORIAL_RUNTIME_VERSIONS.items():
-        actual = installed.get(name)
-        if actual is None:
-            mismatches.append(f"{name}: missing (expected {expected})")
-            continue
-        # PyTorch may carry a local CUDA suffix such as +cu126.  The exact CUDA build is
-        # reported separately; the locked semantic package version is the part before '+'.
-        comparable = actual.split("+", 1)[0] if name == "torch" else actual
+        actual = identity["packages"].get(name)
+        comparable = actual.split("+", 1)[0] if actual and name == "torch" else actual
         if comparable != expected:
-            mismatches.append(f"{name}: {actual} (expected {expected})")
+            mismatches.append(f"{name}: {actual or 'missing'} (expected {expected})")
     if mismatches:
         raise RuntimeError(
             "Tutorial runtime does not match tutorials/requirements-colab.lock:\n- "
@@ -227,8 +196,25 @@ def assert_tutorial_runtime() -> dict[str, Any]:
     return identity
 
 
+def assert_runtime_compatible(provenance: dict[str, Any], current: dict[str, Any]) -> None:
+    """Reject an adapter produced by a materially different tutorial software stack."""
+    recorded = provenance.get("runtime") or {}
+    producer_packages = recorded.get("packages") or {}
+    consumer_packages = current.get("packages") or {}
+    required = ("torch", "transformers", "tokenizers", "peft", "bitsandbytes", "safetensors")
+    missing = [name for name in required if not producer_packages.get(name)]
+    if missing:
+        raise ValueError("Artifact provenance lacks runtime package versions: " + ", ".join(missing))
+    mismatches = [
+        f"{name}: artifact={producer_packages[name]} runtime={consumer_packages.get(name)}"
+        for name in required
+        if producer_packages[name] != consumer_packages.get(name)
+    ]
+    if mismatches:
+        raise ValueError("Artifact/runtime compatibility mismatch:\n- " + "\n- ".join(mismatches))
+
+
 def seed_everything(seed: int) -> dict[str, Any]:
-    """Seed tutorial-controlled RNGs and disclose remaining nondeterminism."""
     random.seed(seed)
     seeded = ["python.random"]
     try:
@@ -238,7 +224,6 @@ def seed_everything(seed: int) -> dict[str, Any]:
     else:
         np.random.seed(seed)
         seeded.append("numpy.random")
-
     try:
         import torch
     except ImportError:
@@ -249,7 +234,6 @@ def seed_everything(seed: int) -> dict[str, Any]:
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
             seeded.append("torch.cuda")
-
     return {
         "seed": seed,
         "seeded": seeded,
@@ -268,11 +252,10 @@ def resolve_tutorial_model(
     max_sequence_length: int,
     allow_internal: bool = False,
 ) -> ModelEntry:
-    """Resolve one model through the canonical repository registry."""
     entry = ModelRegistry.load().resolve(model_key)
     if entry.internal_only and not allow_internal:
         raise ModelError(
-            f"Model {model_key!r} is internal-only and is not a user-facing DIMER choice.",
+            f"Model {model_key!r} is internal-only and not a user-facing DIMER choice.",
             code=Code.MODEL_NOT_APPROVED,
             details={"model_key": model_key},
         )
@@ -281,11 +264,18 @@ def resolve_tutorial_model(
     return entry
 
 
-def normalize_records(records: Iterable[dict[str, Any]]) -> list[Example]:
-    """Normalize records through the canonical dataset implementation.
+def resolve_artifact_model(provenance: dict[str, Any]) -> ModelEntry:
+    """Resolve artifact provenance back through the canonical registry and require identity parity."""
+    key = provenance.get("modelKey")
+    if not isinstance(key, str):
+        raise ValueError("Artifact provenance is missing modelKey")
+    entry = ModelRegistry.load().resolve(key)
+    if entry.model_id != provenance.get("baseModel") or entry.revision != provenance.get("baseModelRevision"):
+        raise ValueError("Artifact base model identity/revision does not match the canonical registry")
+    return entry
 
-    One schema family per collection is enforced, matching a production JSONL split.
-    """
+
+def normalize_records(records: Iterable[dict[str, Any]]) -> list[Example]:
     normalized: list[Example] = []
     family: str | None = None
     for line_number, record in enumerate(records, 1):
@@ -294,8 +284,7 @@ def normalize_records(records: Iterable[dict[str, Any]]) -> list[Example]:
             family = detected
         elif detected != family:
             raise DatasetError(
-                f"Line {line_number}: collection mixes schema families "
-                f"({family!r} then {detected!r}).",
+                f"Line {line_number}: collection mixes schema families ({family!r}, {detected!r}).",
                 code=Code.DATASET_SCHEMA_MIXED,
                 details={"line": line_number, "expected": family, "found": detected},
             )
@@ -306,7 +295,6 @@ def normalize_records(records: Iterable[dict[str, Any]]) -> list[Example]:
 def derive_validation_split(
     examples: list[Example], *, fraction: float, seed: int
 ) -> tuple[list[Example], list[Example]]:
-    """Derive an order-independent validation split from content hashes."""
     if len(examples) < 2 or fraction <= 0:
         return examples, []
     threshold = int(fraction * 10_000)
@@ -324,7 +312,6 @@ def derive_validation_split(
 
 
 def assert_no_split_leakage(splits: dict[str, list[Example]]) -> None:
-    """Reject exact canonical examples that occur in more than one split."""
     fingerprints = {
         name: {example.fingerprint() for example in examples}
         for name, examples in splits.items()
@@ -337,13 +324,12 @@ def assert_no_split_leakage(splits: dict[str, list[Example]]) -> None:
                 raise DatasetError(
                     f"Split leakage: {len(overlap)} canonical record(s) occur in both "
                     f"{left!r} and {right!r}.",
-                    code=Code.DATASET_SPLIT_OVERLAP,
+                    code=Code.DATASET_SPLIT_LEAKAGE,
                     details={"left": left, "right": right, "count": len(overlap)},
                 )
 
 
 def canonical_dataset_digest(splits: dict[str, list[Example]]) -> str:
-    """Hash canonical record identities in stable split/content order."""
     digest = hashlib.sha256()
     for split_name in sorted(splits):
         digest.update(split_name.encode())
@@ -353,13 +339,10 @@ def canonical_dataset_digest(splits: dict[str, list[Example]]) -> str:
 
 
 def render_chat(tokenizer, messages: list[dict[str, str]], *, generation_prompt: bool) -> str:
-    """Render with the model's own chat template; no notebook-side template is allowed."""
     if not messages:
         return ""
     return tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=generation_prompt,
+        messages, tokenize=False, add_generation_prompt=generation_prompt
     )
 
 
@@ -368,53 +351,35 @@ def _encode(tokenizer, text: str) -> list[int]:
 
 
 def build_masked_example(
-    tokenizer,
-    example: Example,
-    *,
-    max_sequence_length: int,
+    tokenizer, example: Example, *, max_sequence_length: int
 ) -> MaskedExample:
-    """Tokenize one canonical example and supervise assistant spans only."""
     messages = list(example.messages)
-    full_text = render_chat(tokenizer, messages, generation_prompt=False)
-    input_ids = _encode(tokenizer, full_text)
+    input_ids = _encode(tokenizer, render_chat(tokenizer, messages, generation_prompt=False))
     if len(input_ids) > max_sequence_length:
         raise DatasetError(
             f"Line {example.line_number}: renders to {len(input_ids)} tokens, above the "
             f"configured limit of {max_sequence_length}.",
             code=Code.DATASET_SEQUENCE_TOO_LONG,
-            details={
-                "line": example.line_number,
-                "tokens": len(input_ids),
-                "limit": max_sequence_length,
-            },
+            details={"line": example.line_number, "tokens": len(input_ids), "limit": max_sequence_length},
         )
-
     labels = [IGNORE_INDEX] * len(input_ids)
     for index, message in enumerate(messages):
         if message["role"] != "assistant":
             continue
         prefix_ids = _encode(
-            tokenizer,
-            render_chat(tokenizer, messages[:index], generation_prompt=True),
+            tokenizer, render_chat(tokenizer, messages[:index], generation_prompt=True)
         )
         upto_ids = _encode(
-            tokenizer,
-            render_chat(tokenizer, messages[: index + 1], generation_prompt=False),
+            tokenizer, render_chat(tokenizer, messages[: index + 1], generation_prompt=False)
         )
-        for stage, candidate in (("prefix", prefix_ids), ("turn", upto_ids)):
-            if input_ids[: len(candidate)] != candidate:
-                raise DatasetError(
-                    f"Line {example.line_number}: chat template is not prefix-stable at "
-                    f"message {index} ({stage}); assistant-only masking is unsafe.",
-                    code=Code.DATASET_CHAT_TEMPLATE_MISSING,
-                    details={
-                        "line": example.line_number,
-                        "message": index,
-                        "stage": stage,
-                    },
-                )
+        if input_ids[: len(prefix_ids)] != prefix_ids or input_ids[: len(upto_ids)] != upto_ids:
+            raise DatasetError(
+                f"Line {example.line_number}: chat template is not prefix-stable; "
+                "assistant-only masking is unsafe.",
+                code=Code.DATASET_CHAT_TEMPLATE_MISSING,
+                details={"line": example.line_number, "message": index},
+            )
         labels[len(prefix_ids) : len(upto_ids)] = input_ids[len(prefix_ids) : len(upto_ids)]
-
     if all(label == IGNORE_INDEX for label in labels):
         raise DatasetError(
             f"Line {example.line_number}: no assistant tokens were supervised.",
@@ -432,7 +397,6 @@ def tokenize_splits(
     validation_fraction: float,
     seed: int,
 ) -> TutorialSplits:
-    """Preserve supplied splits; derive validation only when absent; then mask them."""
     assert_no_split_leakage(raw)
     train_raw = raw["train"]
     derived = False
@@ -446,9 +410,7 @@ def tokenize_splits(
 
     def mask_all(items: list[Example]) -> list[MaskedExample]:
         return [
-            build_masked_example(
-                tokenizer, item, max_sequence_length=max_sequence_length
-            )
+            build_masked_example(tokenizer, item, max_sequence_length=max_sequence_length)
             for item in items
         ]
 
@@ -473,14 +435,10 @@ def load_tokenizer(
     token: str | None = None,
     local_files_only: bool = False,
 ):
-    """Load the selected model's tokenizer from a pinned or verified source."""
     from transformers import AutoTokenizer
 
     source = str(load_ref or entry.model_id)
-    kwargs: dict[str, Any] = {
-        "trust_remote_code": False,
-        "local_files_only": local_files_only,
-    }
+    kwargs: dict[str, Any] = {"trust_remote_code": False, "local_files_only": local_files_only}
     if not local_files_only:
         kwargs["revision"] = entry.revision
         if token:
@@ -497,7 +455,6 @@ def load_tokenizer(
 
 
 def resolve_target_modules(model, entry: ModelEntry) -> list[str]:
-    """Resolve the registry's LoRA target policy against a loaded architecture."""
     if entry.lora_target_modules != "auto":
         return list(entry.lora_target_modules)
     present = {
@@ -524,17 +481,14 @@ def load_base_model(
     local_files_only: bool = False,
     device: str = "cuda",
 ) -> LoadedModel:
-    """Load a pinned/verified causal LM using the repository's supported QLoRA policy."""
     import torch
     from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
     entry.require_method(method)
     if method == "qlora" and not torch.cuda.is_available():
         raise ResourceError(
-            "QLoRA requires a CUDA GPU; none is visible.",
-            code=Code.RESOURCE_GPU_UNAVAILABLE,
+            "QLoRA requires a CUDA GPU; none is visible.", code=Code.RESOURCE_GPU_UNAVAILABLE
         )
-
     compute_dtype = torch.bfloat16 if _bf16_supported() else torch.float16
     quantization_config = None
     if method == "qlora":
@@ -544,7 +498,6 @@ def load_base_model(
             bnb_4bit_use_double_quant=True,
             bnb_4bit_compute_dtype=compute_dtype,
         )
-
     source = str(load_ref or entry.model_id)
     kwargs: dict[str, Any] = {
         "trust_remote_code": False,
@@ -561,11 +514,9 @@ def load_base_model(
             kwargs["token"] = token
     if method == "qlora":
         kwargs["device_map"] = {"": 0}
-
     model = AutoModelForCausalLM.from_pretrained(source, **kwargs)
     if method != "qlora":
         model.to(device)
-
     loaded_revision = getattr(getattr(model, "config", None), "_commit_hash", None)
     if loaded_revision and not local_files_only and loaded_revision != entry.revision:
         raise ModelError(
@@ -583,19 +534,10 @@ def load_base_model(
     )
 
 
-def attach_adapter(
-    loaded: LoadedModel,
-    *,
-    rank: int,
-    alpha: int,
-    dropout: float = 0.05,
-):
-    """Attach a trainable PEFT adapter using the repository's target-module policy."""
+def attach_adapter(loaded: LoadedModel, *, rank: int, alpha: int, dropout: float = 0.05):
     from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
-    model = loaded.model
-    if loaded.quantized:
-        model = prepare_model_for_kbit_training(model)
+    model = prepare_model_for_kbit_training(loaded.model) if loaded.quantized else loaded.model
     config = LoraConfig(
         r=rank,
         lora_alpha=alpha,
@@ -608,8 +550,8 @@ def attach_adapter(
 
 
 def trainable_parameter_summary(model) -> dict[str, int | float]:
-    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    total = sum(p.numel() for p in model.parameters())
+    trainable = sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
+    total = sum(parameter.numel() for parameter in model.parameters())
     return {
         "trainable": trainable,
         "total": total,
@@ -621,18 +563,16 @@ def _collate(batch: list[MaskedExample], *, pad_token_id: int) -> dict[str, Any]
     import torch
 
     width = max(len(item.input_ids) for item in batch)
-    input_ids: list[list[int]] = []
-    labels: list[list[int]] = []
-    attention: list[list[int]] = []
+    inputs, labels, masks = [], [], []
     for item in batch:
         padding = width - len(item.input_ids)
-        input_ids.append(item.input_ids + [pad_token_id] * padding)
+        inputs.append(item.input_ids + [pad_token_id] * padding)
         labels.append(item.labels + [IGNORE_INDEX] * padding)
-        attention.append([1] * len(item.input_ids) + [0] * padding)
+        masks.append([1] * len(item.input_ids) + [0] * padding)
     return {
-        "input_ids": torch.tensor(input_ids, dtype=torch.long),
+        "input_ids": torch.tensor(inputs, dtype=torch.long),
         "labels": torch.tensor(labels, dtype=torch.long),
-        "attention_mask": torch.tensor(attention, dtype=torch.long),
+        "attention_mask": torch.tensor(masks, dtype=torch.long),
     }
 
 
@@ -649,7 +589,6 @@ def evaluate_loss(
     batch_size: int,
     device: str,
 ) -> float | None:
-    """Mean cross-entropy per supervised assistant token."""
     import torch
 
     if not items:
@@ -660,8 +599,7 @@ def evaluate_loss(
     total_tokens = 0
     with torch.inference_mode():
         for batch in _batches(items, batch_size):
-            tensors = _collate(batch, pad_token_id=pad_token_id)
-            tensors = {name: value.to(device) for name, value in tensors.items()}
+            tensors = {k: v.to(device) for k, v in _collate(batch, pad_token_id=pad_token_id).items()}
             outputs = model(**tensors)
             supervised = int((tensors["labels"] != IGNORE_INDEX).sum().item())
             total_loss += float(outputs.loss.item()) * supervised
@@ -680,7 +618,6 @@ def train_adapter(
     device: str = "cuda",
     log=print,
 ) -> TrainingMetrics:
-    """Run the supported tutorial QLoRA training loop."""
     import torch
 
     seed_everything(config.seed)
@@ -688,15 +625,11 @@ def train_adapter(
     started = time.monotonic()
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
-
     trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
     optimizer = torch.optim.AdamW(
-        trainable,
-        lr=config.learning_rate,
-        weight_decay=config.weight_decay,
+        trainable, lr=config.learning_rate, weight_decay=config.weight_decay
     )
     generator = torch.Generator().manual_seed(config.seed)
-
     for epoch in range(config.epochs):
         model.train()
         order = torch.randperm(len(splits.train), generator=generator).tolist()
@@ -705,10 +638,8 @@ def train_adapter(
         epoch_loss = 0.0
         epoch_tokens = 0
         micro = 0
-
         for batch in _batches(shuffled, config.per_device_batch_size):
-            tensors = _collate(batch, pad_token_id=pad_token_id)
-            tensors = {name: value.to(device) for name, value in tensors.items()}
+            tensors = {k: v.to(device) for k, v in _collate(batch, pad_token_id=pad_token_id).items()}
             outputs = model(**tensors)
             (outputs.loss / config.gradient_accumulation_steps).backward()
             supervised = int((tensors["labels"] != IGNORE_INDEX).sum().item())
@@ -720,12 +651,10 @@ def train_adapter(
                 torch.nn.utils.clip_grad_norm_(trainable, 1.0)
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
-
         if micro % config.gradient_accumulation_steps:
             torch.nn.utils.clip_grad_norm_(trainable, 1.0)
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
-
         metrics.epochs_completed = epoch + 1
         metrics.supervised_tokens += epoch_tokens
         metrics.train_loss = epoch_loss / epoch_tokens if epoch_tokens else None
@@ -737,17 +666,13 @@ def train_adapter(
             device=device,
         )
         metrics.history.append(
-            {
-                "epoch": epoch + 1,
-                "trainLoss": metrics.train_loss,
-                "validationLoss": metrics.validation_loss,
-            }
+            {"epoch": epoch + 1, "trainLoss": metrics.train_loss,
+             "validationLoss": metrics.validation_loss}
         )
         log(
             f"epoch {epoch + 1}/{config.epochs} train_loss={metrics.train_loss} "
             f"validation_loss={metrics.validation_loss}"
         )
-
     metrics.test_loss = evaluate_loss(
         model,
         splits.test,
@@ -770,18 +695,16 @@ def generate_reply(
     max_new_tokens: int = 96,
     decoding: dict[str, Any] | None = None,
 ) -> str:
-    """Generate from the repository-supported chat-template path."""
     import torch
 
     if not prompt.strip():
         raise ValueError("prompt must not be empty")
     rendered = render_chat(
-        tokenizer,
-        [{"role": "user", "content": prompt.strip()}],
-        generation_prompt=True,
+        tokenizer, [{"role": "user", "content": prompt.strip()}], generation_prompt=True
     )
+    inputs = tokenizer(rendered, return_tensors="pt", add_special_tokens=False)
     device = next(model.parameters()).device
-    inputs = tokenizer(rendered, return_tensors="pt", add_special_tokens=False).to(device)
+    inputs = {key: value.to(device) for key, value in inputs.items()}
     settings = {"do_sample": False, **(decoding or {})}
     with torch.inference_mode():
         output_ids = model.generate(
@@ -791,9 +714,24 @@ def generate_reply(
             **settings,
         )
     return tokenizer.decode(
-        output_ids[0, inputs["input_ids"].shape[1] :],
-        skip_special_tokens=True,
+        output_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
     ).strip()
+
+
+def validate_prompt(tokenizer, prompt: str, *, max_sequence_length: int) -> int:
+    """Validate new user input before expensive generation and return prompt-token count."""
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("Prompt must be a non-empty string")
+    rendered = render_chat(
+        tokenizer, [{"role": "user", "content": prompt.strip()}], generation_prompt=True
+    )
+    count = len(_encode(tokenizer, rendered))
+    if count >= max_sequence_length:
+        raise ValueError(
+            f"Prompt renders to {count} tokens; it must be below the {max_sequence_length} "
+            "token context ceiling before generation."
+        )
+    return count
 
 
 def sha256_file(path: str | Path) -> str:
@@ -817,12 +755,8 @@ def _safe_member_path(root: Path, member_name: str) -> Path:
 
 
 def safe_extract_zip(
-    zip_path: str | Path,
-    root: str | Path,
-    *,
-    size_limit_bytes: int,
+    zip_path: str | Path, root: str | Path, *, size_limit_bytes: int
 ) -> Path:
-    """Extract a portable ZIP with path, symlink, duplicate, and expanded-size checks."""
     root = Path(root).resolve()
     shutil.rmtree(root, ignore_errors=True)
     root.mkdir(parents=True)
@@ -856,16 +790,10 @@ def verify_manifested_directory(
     expected_format: str = "peft_adapter",
     expected_version: int = 1,
 ) -> dict[str, Any]:
-    """Verify every manifested file and reject unexpected files."""
     root = Path(artifact_root).resolve()
-    manifest_path = root / manifest_name
-    manifest = json.loads(manifest_path.read_text())
-    if (
-        manifest.get("format") != expected_format
-        or manifest.get("formatVersion") != expected_version
-    ):
+    manifest = json.loads((root / manifest_name).read_text())
+    if manifest.get("format") != expected_format or manifest.get("formatVersion") != expected_version:
         raise ValueError("Unsupported artifact format")
-
     listed: set[str] = set()
     listed_bytes = 0
     for record in manifest.get("files", []):
@@ -885,6 +813,9 @@ def verify_manifested_directory(
     }
     if on_disk != listed or listed_bytes != manifest.get("totalBytes"):
         raise ValueError("Manifest/file-set mismatch")
+    required = {"adapter_config.json", "adapter_model.safetensors", "provenance.json"}
+    if not required.issubset(listed):
+        raise ValueError("Artifact manifest is missing required adapter/provenance files")
     return manifest
 
 
@@ -895,10 +826,10 @@ def consume_adapter_archive(
     expected_archive_sha256: str = "",
     size_limit_bytes: int = 512 * 1024**2,
 ) -> tuple[Path, dict[str, Any], dict[str, Any]]:
-    """Verify an externally supplied adapter archive before any model deserialization."""
     archive_path = Path(archive_path)
     actual_sha = sha256_file(archive_path)
-    if expected_archive_sha256 and actual_sha.lower() != expected_archive_sha256.lower():
+    expected = expected_archive_sha256.strip().lower()
+    if expected and actual_sha.lower() != expected:
         raise ValueError("Whole-ZIP SHA-256 mismatch")
     extracted = safe_extract_zip(
         archive_path, extraction_root, size_limit_bytes=size_limit_bytes
@@ -910,7 +841,7 @@ def consume_adapter_archive(
     manifest = verify_manifested_directory(root)
     provenance = json.loads((root / "provenance.json").read_text())
     revision = provenance.get("baseModelRevision")
-    if not isinstance(revision, str) or len(revision) != 40:
+    if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("Invalid baseModelRevision provenance")
     if provenance.get("trustRemoteCode") is not False:
         raise ValueError("trustRemoteCode must be false")
@@ -925,7 +856,6 @@ def export_adapter_bundle(
     provenance: dict[str, Any],
     metrics: dict[str, Any],
 ) -> Path:
-    """Write the deployable PEFT adapter contract with a cryptographic manifest."""
     destination = Path(destination)
     shutil.rmtree(destination, ignore_errors=True)
     destination.mkdir(parents=True)
@@ -936,8 +866,7 @@ def export_adapter_bundle(
     (destination / "MODEL_CARD.md").write_text(
         f"# PEFT adapter for {provenance['baseModel']}\n\n"
         f"Base revision: `{provenance['baseModelRevision']}`.\n\n"
-        "Optimization metrics in metrics.json are tutorial evidence, not task-quality "
-        "validation.\n"
+        "Optimization metrics in metrics.json are tutorial evidence, not task-quality validation.\n"
     )
     records = [
         {
@@ -979,14 +908,11 @@ def load_adapter_for_inference(
     load_ref: str | Path | None = None,
     local_files_only: bool = False,
 ):
-    """Reconstruct base + tokenizer + PEFT adapter from the artifact contract."""
     from peft import PeftModel
 
     artifact_root = Path(artifact_root)
     tokenizer = load_tokenizer(
-        entry,
-        load_ref=artifact_root / "tokenizer",
-        local_files_only=True,
+        entry, load_ref=artifact_root / "tokenizer", local_files_only=True
     )
     loaded = load_base_model(
         entry,
@@ -996,10 +922,6 @@ def load_adapter_for_inference(
         token=token,
         local_files_only=local_files_only,
     )
-    model = PeftModel.from_pretrained(
-        loaded.model,
-        artifact_root,
-        is_trainable=False,
-    )
+    model = PeftModel.from_pretrained(loaded.model, artifact_root, is_trainable=False)
     model.eval()
     return model, tokenizer

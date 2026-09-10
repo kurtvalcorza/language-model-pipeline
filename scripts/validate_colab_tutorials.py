@@ -211,9 +211,11 @@ def assert_secure_private_source(notebook: dict, *, label: str) -> None:
     markdown = markdown_text(notebook)
     assert_markers(
         markdown,
-        ("GITHUB_TOKEN", "read access", "private `language-model-finetuner`"),
+        ("GITHUB_TOKEN", "read access", "`language-model-finetuner`"),
         label=f"{label} private-source prerequisites",
     )
+    if "private" not in markdown.lower():
+        raise AssertionError(f"{label}: private finetuner access requirement is not stated")
 
 
 def assert_support_modules_are_orchestration_only() -> None:

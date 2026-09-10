@@ -18,7 +18,7 @@ MAIN_MARKERS = (
     '"qwen3-0.6b"',
     '"smollm3-3b"',
     '"llama-3.2-3b-instruct"',
-    'BASE_MODEL_KEY = "qwen3-0.6b"',
+    'BASE_MODEL_KEY = "smollm2-360m"',
     'userdata.get("HF_TOKEN")',
     'MODEL_SOURCE = "Pinned Hugging Face"',
     '"dimer-base-manifest.json"',

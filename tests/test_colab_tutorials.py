@@ -111,6 +111,10 @@ def test_both_notebooks_pin_same_pipeline_and_finetuner_revisions():
 
 
 def test_private_finetuner_bootstrap_is_explicit_and_secret_safe():
+    direct_clone = (
+        "!git clone -q "
+        "https://github.com/kurtvalcorza/language-model-finetuner.git"
+    )
     for path in (MAIN, INFERENCE):
         notebook = load_notebook(path)
         code = code_text(notebook)
@@ -118,7 +122,7 @@ def test_private_finetuner_bootstrap_is_explicit_and_secret_safe():
         assert "github_token_from_runtime()" in code
         assert "checkout_private_finetuner(" in code
         assert "del _GITHUB_TOKEN" in code
-        assert "!git clone -q https://github.com/kurtvalcorza/language-model-finetuner.git" not in code
+        assert direct_clone not in code
         assert "https://x-access-token:" not in code
         assert "GITHUB_TOKEN" in markdown
         assert "read access" in markdown

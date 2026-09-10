@@ -37,8 +37,8 @@
     },
     {
       "path": "MODEL_CARD.md",
-      "bytes": 14749,
-      "sha256": "975f4d73f201e982b9dac48e83279e606b9fb60d9ce0ed0e30f0a02b3cc4a08c"
+      "bytes": 15143,
+      "sha256": "1e9892a0372a4f196d80b04c291f612e021d3467d0fb85d739b952b0b39bac4b"
     },
     {
       "path": "README.md",
@@ -76,5 +76,5 @@
       "sha256": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79"
     }
   ],
-  "totalBytes": 727133199
+  "totalBytes": 727133593
 }

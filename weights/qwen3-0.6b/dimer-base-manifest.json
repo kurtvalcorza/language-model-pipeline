@@ -32,13 +32,13 @@
     },
     {
       "path": "MODEL_CARD.md",
-      "bytes": 14249,
-      "sha256": "4c2a484c36c40aa409c799ba0fd8bdb027ba7d9e27ffee8fffd69a55b398136a"
+      "bytes": 14813,
+      "sha256": "ced6a1f7b2a96e99b263caf9a6829feb431755df26ab85e391f06597df7858f1"
     },
     {
       "path": "README.md",
-      "bytes": 24790,
-      "sha256": "bbb333da31037d25a1be224594d7ef7a08c7e77f76587178feb189cac39aef8f"
+      "bytes": 13965,
+      "sha256": "1ab64a26fcb3b461423b89a433a8c858f1bf8d4086f979cbb3ff878d47cf20e9"
     },
     {
       "path": "tokenizer.json",
@@ -56,5 +56,5 @@
       "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
     }
   ],
-  "totalBytes": 1519232747
+  "totalBytes": 1519222486
 }

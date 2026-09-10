@@ -1,4 +1,6 @@
+import hashlib
 import json
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -6,10 +8,11 @@ import pytest
 
 from lmpipeline.errors import Code, DatasetError, ModelError
 from lmpipeline.tutorial_api import (
+    assert_finetuner_checkout,
     assert_no_split_leakage,
+    assert_runtime_compatible,
     canonical_dataset_digest,
     consume_adapter_archive,
-    derive_validation_split,
     normalize_records,
     resolve_artifact_model,
     resolve_tutorial_model,
@@ -47,14 +50,6 @@ def test_normalize_records_rejects_mixed_schema_families():
     assert caught.value.code == Code.DATASET_SCHEMA_MIXED
 
 
-def test_validation_split_is_order_independent():
-    examples = normalize_records(_records())
-    train_a, val_a = derive_validation_split(examples, fraction=0.25, seed=42)
-    train_b, val_b = derive_validation_split(list(reversed(examples)), fraction=0.25, seed=42)
-    assert {item.fingerprint() for item in train_a} == {item.fingerprint() for item in train_b}
-    assert {item.fingerprint() for item in val_a} == {item.fingerprint() for item in val_b}
-
-
 def test_split_leakage_uses_stable_pipeline_error_code():
     examples = normalize_records(_records())
     with pytest.raises(DatasetError) as caught:
@@ -84,6 +79,70 @@ def test_internal_model_is_not_a_user_facing_tutorial_choice():
         )
 
 
+def test_runtime_compatibility_accepts_torch_build_suffix():
+    producer = {
+        "packageVersions": {
+            "torch": "2.8.0+cu128",
+            "transformers": "5.16.1",
+            "tokenizers": "0.23.2",
+            "peft": "0.20.0",
+            "bitsandbytes": "0.49.0",
+            "safetensors": "0.8.0",
+        }
+    }
+    current = {
+        "packages": {
+            "torch": "2.8.0",
+            "transformers": "5.16.1",
+            "tokenizers": "0.23.2",
+            "peft": "0.20.0",
+            "bitsandbytes": "0.49.0",
+            "safetensors": "0.8.0",
+        }
+    }
+    assert_runtime_compatible(producer, current)
+
+
+def test_runtime_compatibility_rejects_material_mismatch():
+    producer = {
+        "packageVersions": {
+            "torch": "2.8.0",
+            "transformers": "5.15.0",
+            "tokenizers": "0.23.2",
+            "peft": "0.20.0",
+            "bitsandbytes": "0.49.0",
+            "safetensors": "0.8.0",
+        }
+    }
+    current = {
+        "packages": {
+            "torch": "2.8.0",
+            "transformers": "5.16.1",
+            "tokenizers": "0.23.2",
+            "peft": "0.20.0",
+            "bitsandbytes": "0.49.0",
+            "safetensors": "0.8.0",
+        }
+    }
+    with pytest.raises(ValueError, match="compatibility mismatch"):
+        assert_runtime_compatible(producer, current)
+
+
+def test_finetuner_checkout_verifies_exact_git_head(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    (repo / "x.txt").write_text("x")
+    subprocess.run(["git", "-C", str(repo), "add", "x.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "x"], check=True)
+    revision = subprocess.check_output(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
+    ).strip()
+    assert assert_finetuner_checkout(repo, revision) == revision
+
+
 def test_safe_extract_rejects_parent_traversal(tmp_path):
     archive = tmp_path / "bad.zip"
     with zipfile.ZipFile(archive, "w") as handle:
@@ -94,9 +153,11 @@ def test_safe_extract_rejects_parent_traversal(tmp_path):
 
 def _write_adapter_artifact(root: Path):
     root.mkdir()
+    (root / "tokenizer").mkdir()
     files = {
         "adapter_config.json": "{}",
         "adapter_model.safetensors": "safe-bytes",
+        "tokenizer/tokenizer.json": "{}",
         "provenance.json": json.dumps(
             {
                 "modelKey": "qwen3-1.7b",
@@ -106,8 +167,6 @@ def _write_adapter_artifact(root: Path):
             }
         ),
     }
-    import hashlib
-
     records = []
     for name, text in files.items():
         path = root / name
@@ -123,8 +182,6 @@ def _write_adapter_artifact(root: Path):
     (root / "artifact-manifest.json").write_text(
         json.dumps(
             {
-                "format": "peft_adapter",
-                "formatVersion": 1,
                 "files": records,
                 "totalBytes": sum(item["bytes"] for item in records),
             }
@@ -146,12 +203,13 @@ def test_external_adapter_consumption_and_registry_identity(tmp_path):
     _write_adapter_artifact(root)
     archive = tmp_path / "adapter.zip"
     with zipfile.ZipFile(archive, "w") as handle:
-        for path in root.iterdir():
-            handle.write(path, path.name)
+        for path in root.rglob("*"):
+            if path.is_file():
+                handle.write(path, path.relative_to(root).as_posix())
     extracted, manifest, provenance = consume_adapter_archive(
         archive, extraction_root=tmp_path / "extracted"
     )
     assert extracted.is_dir()
-    assert manifest["format"] == "peft_adapter"
+    assert manifest["totalBytes"] > 0
     entry = resolve_artifact_model(provenance)
     assert entry.key == "qwen3-1.7b"

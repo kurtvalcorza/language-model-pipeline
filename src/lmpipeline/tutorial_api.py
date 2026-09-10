@@ -101,7 +101,11 @@ def assert_tutorial_runtime() -> dict[str, Any]:
 
 def assert_runtime_compatible(provenance: dict[str, Any], current: dict[str, Any]) -> None:
     """Require the critical producer and consumer ML stacks to match exactly."""
-    producer = provenance.get("packageVersions") or provenance.get("runtime", {}).get("packages") or {}
+    producer = (
+        provenance.get("packageVersions")
+        or provenance.get("runtime", {}).get("packages")
+        or {}
+    )
     consumer = current.get("packages") or {}
     required = ("torch", "transformers", "tokenizers", "peft", "bitsandbytes", "safetensors")
     missing = [name for name in required if not producer.get(name)]

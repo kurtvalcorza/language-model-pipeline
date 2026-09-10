@@ -1,7 +1,7 @@
 """Static conformance checks for release-grade language-model tutorial notebooks.
 
-This proves source structure only. It deliberately does not claim clean-runtime execution;
-that evidence is recorded separately under tutorials/RELEASE_VERIFICATION.md.
+These checks prove source structure only. Clean-runtime execution evidence is recorded
+separately under tutorials/RELEASE_VERIFICATION.md.
 """
 
 from __future__ import annotations
@@ -16,38 +16,51 @@ TUTORIALS = ROOT / "tutorials"
 MAIN = TUTORIALS / "language_model_finetuning_colab.ipynb"
 INFERENCE = TUTORIALS / "language_model_artifact_inference_colab.ipynb"
 LOCK = TUTORIALS / "requirements-colab.lock"
+TUTORIAL_API = ROOT / "src" / "lmpipeline" / "tutorial_api.py"
 SPEC_VERSION = "1.0"
 
+PIPELINE_PIN = re.compile(
+    r"git\+https://github\.com/kurtvalcorza/language-model-pipeline\.git@([0-9a-f]{40})"
+)
+FINETUNER_PIN = re.compile(
+    r"git -C /content/language-model-finetuner checkout -q ([0-9a-f]{40})"
+)
+PLACEHOLDERS = re.compile(r"\b(?:TODO|TBD|FIXME)\b", re.IGNORECASE)
+
 MAIN_MARKERS = (
-    "from lmpipeline.tutorial_api import",
-    "assert_tutorial_runtime",
-    "seed_everything",
-    "resolve_tutorial_model",
-    "normalize_records",
-    "resolve_dataset",
-    "load_examples",
+    "from finetuner.artifacts import build_provenance, stage_artifact, verify_manifest",
+    "from finetuner.backends import (",
+    "from finetuner.config import TrainingConfig",
+    "from finetuner.data import (",
+    "from finetuner.inference import (",
+    "from finetuner.masking import build_masked_example",
+    "from finetuner.training import train",
+    "load_normalized_splits",
     "tokenize_splits",
-    "attach_adapter",
-    "train_adapter",
-    "generate_reply",
+    "load_base_model(",
+    "attach_adapter(",
+    "train(",
+    "stage_artifact(",
+    "generate_reply(",
+    "verify_adapter_active(",
     "CUSTOM_PROMPT",
     "tutorial_predictions.jsonl",
-    "export_adapter_bundle",
-    "load_adapter_for_inference",
+    'PROVENANCE["runtimeRevisions"]',
 )
 
 INFERENCE_MARKERS = (
-    "from lmpipeline.tutorial_api import",
-    "assert_tutorial_runtime",
-    "consume_adapter_archive",
-    "resolve_artifact_model",
-    "assert_runtime_compatible",
-    "load_adapter_for_inference",
+    "from finetuner.inference import (",
+    "load_adapter_for_inference(",
+    "generate_reply(",
+    "verify_adapter_active(",
+    "consume_adapter_archive(",
+    "resolve_artifact_model(PROVENANCE)",
+    "assert_runtime_compatible(PROVENANCE, RUNTIME)",
     "CUSTOM_PROMPT",
-    "validate_prompt",
-    "generate_reply",
+    "validate_prompt(",
     "artifact_inference_predictions.jsonl",
     "artifact_inference_provenance.json",
+    "RECORDED_RUNTIME_REVISIONS",
 )
 
 FORBIDDEN_NOTEBOOK_CORE = (
@@ -56,9 +69,13 @@ FORBIDDEN_NOTEBOOK_CORE = (
     "get_peft_model",
     "prepare_model_for_kbit_training",
     "PeftModel.from_pretrained",
+    "def train(",
     "def train_adapter(",
     "def build_masked_example(",
-    "def resolve_target_modules(",
+    "def load_base_model(",
+    "def load_adapter_for_inference(",
+    "def generate_reply(",
+    "def stage_artifact(",
 )
 
 FORBIDDEN_EXECUTION = (
@@ -68,25 +85,26 @@ FORBIDDEN_EXECUTION = (
     "torch.load(",
 )
 
-PLACEHOLDERS = re.compile(r"\b(?:TODO|TBD|FIXME)\b", re.IGNORECASE)
-REPO_PIN = re.compile(
-    r"git\+https://github\.com/kurtvalcorza/language-model-pipeline\.git@([0-9a-f]{40})"
+FORBIDDEN_TUTORIAL_API_CORE_DEFS = (
+    "def train_adapter(",
+    "def load_base_model(",
+    "def attach_adapter(",
+    "def build_masked_example(",
+    "def tokenize_splits(",
+    "def generate_reply(",
+    "def load_adapter_for_inference(",
+    "def stage_artifact(",
+    "def export_adapter_bundle(",
 )
 
 
 def load_notebook(path: Path) -> dict:
-    notebook = json.loads(path.read_text(encoding="utf-8"))
-    if notebook.get("nbformat") != 4:
-        raise AssertionError(f"{path.name}: expected nbformat 4")
-    cells = notebook.get("cells")
-    if not isinstance(cells, list) or not cells:
-        raise AssertionError(f"{path.name}: notebook has no cells")
-    return notebook
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def cell_source(cell: dict) -> str:
     source = cell.get("source", "")
-    return "".join(source) if isinstance(source, list) else str(source)
+    return "".join(source) if isinstance(source, list) else source
 
 
 def code_text(notebook: dict) -> str:
@@ -97,9 +115,7 @@ def code_text(notebook: dict) -> str:
 
 def markdown_text(notebook: dict) -> str:
     return "\n".join(
-        cell_source(cell)
-        for cell in notebook["cells"]
-        if cell.get("cell_type") == "markdown"
+        cell_source(cell) for cell in notebook["cells"] if cell.get("cell_type") == "markdown"
     )
 
 
@@ -113,8 +129,7 @@ def compile_code_cells(notebook: dict, *, label: str) -> None:
             continue
         source = cell_source(cell)
         python_lines = [
-            line for line in source.splitlines()
-            if not line.lstrip().startswith(("%", "!"))
+            line for line in source.splitlines() if not line.lstrip().startswith(("%", "!"))
         ]
         try:
             ast.parse("\n".join(python_lines))
@@ -137,10 +152,10 @@ def assert_clean_notebook(notebook: dict, *, label: str) -> None:
 
 def validate_member_path(member: str) -> PurePosixPath:
     if "\\" in member:
-        raise ValueError(f"unsafe member path: {member!r}")
+        raise ValueError("backslash")
     path = PurePosixPath(member)
     if path.is_absolute() or ".." in path.parts:
-        raise ValueError(f"unsafe member path: {member!r}")
+        raise ValueError("unsafe")
     return path
 
 
@@ -150,8 +165,7 @@ def assert_profile(notebook: dict, expected: str, *, label: str) -> None:
         raise AssertionError(f"{label}: expected dimer.notebook_profile={expected!r}")
     if dimer.get("notebook_spec_version") != SPEC_VERSION:
         raise AssertionError(f"{label}: expected notebook spec {SPEC_VERSION}")
-    markdown = markdown_text(notebook)
-    if f"**Profile:** `{expected}`" not in markdown:
+    if f"**Profile:** `{expected}`" not in markdown_text(notebook):
         raise AssertionError(f"{label}: profile must also be visible to the learner")
 
 
@@ -165,13 +179,20 @@ def assert_no_parallel_implementation(notebook: dict, *, label: str) -> None:
     code = code_text(notebook)
     present = [marker for marker in FORBIDDEN_NOTEBOOK_CORE if marker in code]
     if present:
-        raise AssertionError(
-            f"{label}: notebook reimplements core pipeline behavior instead of using "
-            f"lmpipeline.tutorial_api: {present}"
-        )
+        raise AssertionError(f"{label}: notebook reimplements production behavior: {present}")
     dangerous = [marker for marker in FORBIDDEN_EXECUTION if marker in code]
     if dangerous:
         raise AssertionError(f"{label}: forbidden executable/deserialization markers: {dangerous}")
+
+
+def assert_tutorial_api_is_support_only() -> None:
+    text = TUTORIAL_API.read_text(encoding="utf-8")
+    present = [marker for marker in FORBIDDEN_TUTORIAL_API_CORE_DEFS if marker in text]
+    if present:
+        raise AssertionError(
+            "lmpipeline.tutorial_api must remain notebook support, not a parallel trainer: "
+            f"{present}"
+        )
 
 
 def assert_colab_param_annotations(notebook: dict, *, label: str) -> None:
@@ -181,7 +202,7 @@ def assert_colab_param_annotations(notebook: dict, *, label: str) -> None:
         for line_number, line in enumerate(cell_source(cell).splitlines(), 1):
             if "# @param" not in line:
                 continue
-            code_part = line.split("# @param", 1)[0].strip()
+            code_part = line.split("# @param", 1)[0].rstrip()
             try:
                 tree = ast.parse(code_part)
             except SyntaxError as exc:
@@ -190,14 +211,15 @@ def assert_colab_param_annotations(notebook: dict, *, label: str) -> None:
                 ) from exc
             if len(tree.body) != 1 or not isinstance(tree.body[0], (ast.Assign, ast.AnnAssign)):
                 raise AssertionError(
-                    f"{label}: @param must annotate exactly one assignment at cell "
+                    f"{label}: @param must annotate one assignment at cell "
                     f"{cell_index}, line {line_number}"
                 )
 
 
 def assert_lock_is_exact() -> None:
     lines = [
-        line.strip() for line in LOCK.read_text(encoding="utf-8").splitlines()
+        line.strip()
+        for line in LOCK.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
     if not lines:
@@ -207,34 +229,47 @@ def assert_lock_is_exact() -> None:
         raise AssertionError(f"requirements-colab.lock contains non-exact requirements: {bad}")
 
 
-def repository_pin(notebook: dict, *, label: str) -> str:
-    matches = REPO_PIN.findall(code_text(notebook))
+def _single_pin(pattern: re.Pattern[str], notebook: dict, *, label: str, kind: str) -> str:
+    matches = pattern.findall(code_text(notebook))
     if len(matches) != 1:
-        raise AssertionError(f"{label}: expected exactly one immutable repository install pin")
+        raise AssertionError(f"{label}: expected exactly one immutable {kind} revision pin")
     return matches[0]
 
 
+def repository_pin(notebook: dict, *, label: str) -> str:
+    return _single_pin(PIPELINE_PIN, notebook, label=label, kind="pipeline")
+
+
+def finetuner_pin(notebook: dict, *, label: str) -> str:
+    return _single_pin(FINETUNER_PIN, notebook, label=label, kind="finetuner")
+
+
 def assert_learning_contract(main: dict, inference: dict) -> None:
-    main_md = markdown_text(main)
-    inference_md = markdown_text(inference)
-    required_main = (
-        "Adaptation semantics",
-        "assistant-only",
-        "optimization evidence",
-        "It does **not** establish",
-        "BYOD privacy boundary",
-        "reconstruct",
+    assert_markers(
+        markdown_text(main),
+        (
+            "production `finetuner.data`",
+            "production masking implementation",
+            "optimization evidence",
+            "BYOD privacy boundary",
+            "runtime-source revisions",
+            "does **not** establish",
+        ),
+        label="main markdown",
     )
-    required_inference = (
-        "No training or fine-tuning occurs",
-        "Trust boundary",
-        "sender authenticity",
-        "externally supplied",
-        "new user input",
-        "It does **not** establish",
+    assert_markers(
+        markdown_text(inference),
+        (
+            "externally supplied PEFT adapter ZIP",
+            "No training or fine-tuning occurs",
+            "Trust boundary",
+            "sender authenticity",
+            "production inference surface",
+            "runtime-source revisions",
+            "does **not** establish",
+        ),
+        label="inference markdown",
     )
-    assert_markers(main_md, required_main, label="main markdown")
-    assert_markers(inference_md, required_inference, label="inference markdown")
 
 
 def validate_notebooks() -> None:
@@ -243,6 +278,7 @@ def validate_notebooks() -> None:
     assert_profile(main, "E2E", label="main")
     assert_profile(inference, "ARTIFACT-INFERENCE", label="inference")
     assert_lock_is_exact()
+    assert_tutorial_api_is_support_only()
 
     for label, notebook in (("main", main), ("inference", inference)):
         assert_clean_notebook(notebook, label=label)
@@ -254,13 +290,24 @@ def validate_notebooks() -> None:
     assert_markers(code_text(inference), INFERENCE_MARKERS, label="inference")
     assert_learning_contract(main, inference)
 
-    main_pin = repository_pin(main, label="main")
-    inference_pin = repository_pin(inference, label="inference")
-    if main_pin != inference_pin:
-        raise AssertionError(
-            "tutorial notebooks must install the same immutable language-model-pipeline revision: "
-            f"main={main_pin}, inference={inference_pin}"
-        )
+    main_pipeline = repository_pin(main, label="main")
+    inference_pipeline = repository_pin(inference, label="inference")
+    main_finetuner = finetuner_pin(main, label="main")
+    inference_finetuner = finetuner_pin(inference, label="inference")
+    if main_pipeline != inference_pipeline:
+        raise AssertionError("both notebooks must use the same pipeline runtime revision")
+    if main_finetuner != inference_finetuner:
+        raise AssertionError("both notebooks must use the same finetuner runtime revision")
+
+    for label, notebook, pipeline, finetuner in (
+        ("main", main, main_pipeline, main_finetuner),
+        ("inference", inference, inference_pipeline, inference_finetuner),
+    ):
+        code = code_text(notebook)
+        if f'PIPELINE_RUNTIME_REVISION = "{pipeline}"' not in code:
+            raise AssertionError(f"{label}: pipeline runtime provenance does not match install pin")
+        if f'FINETUNER_RUNTIME_REVISION = "{finetuner}"' not in code:
+            raise AssertionError(f"{label}: finetuner runtime provenance does not match checkout pin")
 
 
 if __name__ == "__main__":

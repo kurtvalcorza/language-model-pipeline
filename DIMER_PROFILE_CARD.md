@@ -7,6 +7,8 @@
 [![Open Fine-Tuning Tutorial In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb)
 [![Open Artifact Inference In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb)
 
+This repository-level profile predates the DIMER Model Card Specification. The normative per-snapshot cards are [`weights/qwen3-0.6b/MODEL_CARD.md`](weights/qwen3-0.6b/MODEL_CARD.md) and [`weights/smollm2-360m/MODEL_CARD.md`](weights/smollm2-360m/MODEL_CARD.md).
+
 ---
 
 ## Description
@@ -47,7 +49,8 @@ weights/
     ├── vocab.json                     <-- BPE token vocabulary (151,936 tokens)
     ├── merges.txt                     <-- BPE subword merge rules
     ├── dimer-base-manifest.json       <-- Cryptographic SHA-256 integrity manifest
-    ├── README.md                      <-- Qwen3-0.6B dedicated model card
+    ├── README.md                      <-- Packaged upstream model card
+    ├── MODEL_CARD.md                  <-- DIMER Model Card Specification v1.0
     ├── LICENSE                        <-- Upstream Apache License 2.0
     └── model.safetensors              <-- (1.50 GB: Excluded from Git; uploaded to DIMER)
 ```
@@ -55,7 +58,8 @@ weights/
 ### Links to In-Repository Model Files
 - **Base Weights Root Directory:** [`language-model-pipeline/weights/README.md`](https://github.com/kurtvalcorza/language-model-pipeline/blob/main/weights/README.md)
 - **Qwen3-0.6B Dedicated Snapshot:** [`language-model-pipeline/weights/qwen3-0.6b/`](https://github.com/kurtvalcorza/language-model-pipeline/tree/main/weights/qwen3-0.6b)
-- **Qwen3-0.6B Model Card:** [`language-model-pipeline/weights/qwen3-0.6b/README.md`](https://github.com/kurtvalcorza/language-model-pipeline/blob/main/weights/qwen3-0.6b/README.md)
+- **Qwen3-0.6B DIMER Model Card:** [`language-model-pipeline/weights/qwen3-0.6b/MODEL_CARD.md`](https://github.com/kurtvalcorza/language-model-pipeline/blob/main/weights/qwen3-0.6b/MODEL_CARD.md)
+- **SmolLM2-360M-Instruct DIMER Model Card:** [`language-model-pipeline/weights/smollm2-360m/MODEL_CARD.md`](https://github.com/kurtvalcorza/language-model-pipeline/blob/main/weights/smollm2-360m/MODEL_CARD.md)
 - **Cryptographic Manifest:** [`language-model-pipeline/weights/qwen3-0.6b/dimer-base-manifest.json`](https://github.com/kurtvalcorza/language-model-pipeline/blob/main/weights/qwen3-0.6b/dimer-base-manifest.json)
 
 ### Git Tracking

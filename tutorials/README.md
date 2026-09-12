@@ -13,7 +13,7 @@ training or serving implementations.
 | [`language_model_artifact_inference_colab.ipynb`](language_model_artifact_inference_colab.ipynb) | `ARTIFACT-INFERENCE` | Strict external-artifact validation, production reconstruction, new-input generation and machine-readable export | **Candidate — clean-runtime verification required** |
 
 Each profile is also recorded under `metadata.dimer.notebook_profile`, with
-`metadata.dimer.notebook_spec_version = "1.0"`. Clean-runtime release evidence is tracked in
+`metadata.dimer.notebook_spec = "1.0"`. Clean-runtime release evidence is tracked in
 [`RELEASE_VERIFICATION.md`](RELEASE_VERIFICATION.md).
 
 ## Runtime and private-source prerequisite
@@ -67,7 +67,7 @@ package compatibility rather than inventing source provenance that was never rec
 
 ## E2E workflow and metrics
 
-The E2E notebook resolves a user-facing model through the canonical registry, seeds before
+The E2E notebook defaults to **SmolLM2-360M** for a compact tutorial run while retaining the other approved registry choices. It resolves the selected user-facing model through the canonical registry, seeds before
 model construction, loads either a pinned public sample or BYOD through production data
 normalization, applies production assistant-only masking, runs production QLoRA/PEFT training,
 performs deterministic new-input inference, writes JSONL/CSV/JSON outputs, stages and hashes

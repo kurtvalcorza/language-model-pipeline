@@ -65,11 +65,13 @@ def test_normative_profiles_are_declared_in_metadata_and_markdown():
     inference = load_notebook(INFERENCE)
     assert main["metadata"]["dimer"] == {
         "notebook_profile": "E2E",
-        "notebook_spec_version": "1.0",
+        "notebook_spec": "1.0",
+        "capability": "language_model_supervised_finetuning",
     }
     assert inference["metadata"]["dimer"] == {
         "notebook_profile": "ARTIFACT-INFERENCE",
-        "notebook_spec_version": "1.0",
+        "notebook_spec": "1.0",
+        "capability": "language_model_adapter_artifact_inference",
     }
     assert "**Profile:** `E2E`" in markdown_text(main)
     assert "**Profile:** `ARTIFACT-INFERENCE`" in markdown_text(inference)
@@ -133,7 +135,7 @@ def test_finetuning_uses_user_facing_default_and_real_byod_path():
     notebook = load_notebook(MAIN)
     code = code_text(notebook)
     markdown = markdown_text(notebook)
-    assert 'BASE_MODEL_KEY = "qwen3-1.7b"' in code
+    assert 'BASE_MODEL_KEY = "smollm2-360m"' in code
     assert 'DATA_SOURCE = "Sample: Filipino SFT"' in code
     assert '"Bring Your Own Dataset"' in code
     assert "load_normalized_splits" in code

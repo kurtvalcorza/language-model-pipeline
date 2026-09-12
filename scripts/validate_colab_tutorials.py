@@ -55,6 +55,7 @@ MAIN_MARKERS = (
     "generate_reply(",
     "verify_adapter_active(",
     "CUSTOM_PROMPT",
+    'BASE_MODEL_KEY = "smollm2-360m"',
     "tutorial_predictions.jsonl",
     'PROVENANCE["runtimeRevisions"]',
     '"safetensors"',
@@ -187,7 +188,7 @@ def assert_profile(notebook: dict, expected: str, *, label: str) -> None:
     dimer = notebook.get("metadata", {}).get("dimer", {})
     if dimer.get("notebook_profile") != expected:
         raise AssertionError(f"{label}: expected dimer.notebook_profile={expected!r}")
-    if dimer.get("notebook_spec_version") != SPEC_VERSION:
+    if dimer.get("notebook_spec") != SPEC_VERSION:
         raise AssertionError(f"{label}: expected notebook spec {SPEC_VERSION}")
     if f"**Profile:** `{expected}`" not in markdown_text(notebook):
         raise AssertionError(f"{label}: profile must also be visible to the learner")

@@ -4,10 +4,12 @@ This directory contains comprehensive, standalone educational tutorials on **Sup
 
 The tutorials guide you through the end-to-end lifecycle of adapting an open foundation language model: from acquiring verified base weights and formatting multi-turn conversational datasets to 4-bit QLoRA training, before-and-after behavioral evaluation, standalone adapter packaging, and fresh reload verification.
 
-| Tutorial Notebook | Purpose | Workflow Stages |
-|---|---|---|
-| [**Language-Model Fine-Tuning**](language_model_finetuning_colab.ipynb) | End-to-end supervised fine-tuning guide | Base-model acquisition → Dataset validation & normalization → Chat template formatting & assistant masking → Baseline generation → 4-bit QLoRA SFT → Before/after evaluation → Adapter bundle export → Clean reload test |
-| [**Artifact Inference**](language_model_artifact_inference_colab.ipynb) | Production adapter verification & inference | Upload adapter bundle → Cryptographic manifest & provenance verification → Base-model resolution → Dynamic PEFT attachment → Multi-turn generation |
+**DIMER Notebook Specification:** `1.0`
+
+| Tutorial Notebook | Profile | Purpose | Workflow Stages |
+|---|---|---|---|
+| [**Language-Model Fine-Tuning**](language_model_finetuning_colab.ipynb) | `E2E` | End-to-end supervised fine-tuning guide | Base-model acquisition → Dataset validation & normalization → Chat template formatting & assistant masking → Baseline generation → 4-bit QLoRA SFT → Before/after evaluation → Adapter bundle export → Clean reload test |
+| [**Artifact Inference**](language_model_artifact_inference_colab.ipynb) | `ARTIFACT-INFERENCE` | Production adapter verification & inference | Upload adapter bundle → Cryptographic manifest & provenance verification → Base-model resolution → Dynamic PEFT attachment → Multi-turn generation |
 
 ## Interactive Runtimes (Google Colab)
 

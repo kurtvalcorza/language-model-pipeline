@@ -17,6 +17,7 @@ repository_pin = VALIDATOR["repository_pin"]
 validate_member_path = VALIDATOR["validate_member_path"]
 validate_notebooks = VALIDATOR["validate_notebooks"]
 assert_canonical_serialization = VALIDATOR["assert_canonical_serialization"]
+assert_guaranteed_token_cleanup = VALIDATOR["assert_guaranteed_token_cleanup"]
 
 
 def test_notebooks_exist_and_validate():
@@ -129,7 +130,7 @@ def test_private_finetuner_bootstrap_is_explicit_and_secret_safe():
         assert "del _GITHUB_TOKEN" in code
         # The delete must be guaranteed, not straight-line: a failed clone (bad token,
         # unreachable revision) otherwise leaves the secret bound for the whole session.
-        assert "finally:\n    del _GITHUB_TOKEN" in code
+        assert_guaranteed_token_cleanup(notebook, label="bootstrap")
         assert direct_clone not in code
         assert "https://x-access-token:" not in code
         assert "GITHUB_TOKEN" in markdown
@@ -262,3 +263,52 @@ def test_canonical_serialization_gate_rejects_a_minified_notebook(tmp_path):
     )
     with pytest.raises(AssertionError, match="not canonically serialized"):
         assert_canonical_serialization(minified, label="minified")
+
+
+def _cell(source):
+    return {"cells": [{"cell_type": "code", "source": source}]}
+
+
+def test_token_cleanup_gate_accepts_the_guaranteed_form():
+    assert_guaranteed_token_cleanup(
+        _cell(
+            "_GITHUB_TOKEN = github_token_from_runtime()\n"
+            "try:\n"
+            "    checkout_private_finetuner(ROOT, revision=REV, token=_GITHUB_TOKEN)\n"
+            "finally:\n"
+            "    del _GITHUB_TOKEN\n"
+        ),
+        label="guaranteed",
+    )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Straight-line delete: skipped whenever the clone raises.
+        "_GITHUB_TOKEN = github_token_from_runtime()\n"
+        "checkout_private_finetuner(ROOT, revision=REV, token=_GITHUB_TOKEN)\n"
+        "del _GITHUB_TOKEN\n",
+        # A `finally:` and an indented `del` that belong to unrelated statements. The
+        # substring oracle this replaced accepted exactly this shape.
+        "_GITHUB_TOKEN = github_token_from_runtime()\n"
+        "checkout_private_finetuner(ROOT, revision=REV, token=_GITHUB_TOKEN)\n"
+        "if CLEANUP:\n"
+        "    del _GITHUB_TOKEN\n"
+        "try:\n"
+        "    stage()\n"
+        "finally:\n"
+        "    handle.close()\n",
+        # Delete in the finally, but the checkout is outside the try, so a raising
+        # checkout never reaches it.
+        "_GITHUB_TOKEN = github_token_from_runtime()\n"
+        "checkout_private_finetuner(ROOT, revision=REV, token=_GITHUB_TOKEN)\n"
+        "try:\n"
+        "    stage()\n"
+        "finally:\n"
+        "    del _GITHUB_TOKEN\n",
+    ],
+)
+def test_token_cleanup_gate_rejects_every_leaking_form(source):
+    with pytest.raises(AssertionError, match="finally"):
+        assert_guaranteed_token_cleanup(_cell(source), label="leaky")

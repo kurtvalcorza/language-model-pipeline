@@ -119,10 +119,13 @@ def assert_runtime_compatible(provenance: dict[str, Any], current: dict[str, Any
         raise ValueError(
             "Artifact provenance lacks runtime package versions: " + ", ".join(missing)
         )
+    def comparable(value: Any) -> str:
+        return value.split("+", 1)[0] if isinstance(value, str) else ""
+
     mismatches = [
         f"{name}: artifact={producer[name]} runtime={consumer.get(name)}"
         for name in required
-        if producer[name].split("+", 1)[0] != (consumer.get(name) or "").split("+", 1)[0]
+        if comparable(producer[name]) != comparable(consumer.get(name))
     ]
     if mismatches:
         raise ValueError("Artifact/runtime compatibility mismatch:\n- " + "\n- ".join(mismatches))
@@ -287,35 +290,49 @@ def safe_extract_zip(
     *,
     size_limit_bytes: int,
 ) -> Path:
-    """Extract an untrusted ZIP after path, link, duplicate, and size checks."""
+    """Extract an untrusted ZIP after path, link, duplicate, and size checks.
+
+    Collisions are resolved against the archive's declared member names rather than
+    against whatever happens to be on disk when a member is reached, so every ordering
+    of a file/directory conflict is rejected as a ValueError instead of surfacing as an
+    OSError from the extraction call itself.
+    """
     root = Path(root).resolve()
     shutil.rmtree(root, ignore_errors=True)
     root.mkdir(parents=True)
     expanded = 0
-    seen: set[str] = set()
+    files: set[str] = set()
+    directories: set[str] = set()
+
+    def claim_directory(canonical: str) -> None:
+        parts = PurePosixPath(canonical).parts if canonical else ()
+        for index in range(len(parts)):
+            prefix = PurePosixPath(*parts[: index + 1]).as_posix()
+            if prefix in files:
+                raise ValueError(f"Archive member collides with a file: {canonical}")
+            directories.add(prefix)
+
     with zipfile.ZipFile(zip_path) as archive:
         for info in archive.infolist():
             canonical = PurePosixPath(info.filename).as_posix()
-            if canonical in seen and not info.is_dir():
-                raise ValueError(f"Duplicate archive member: {canonical}")
-            seen.add(canonical)
             mode = (info.external_attr >> 16) & 0xFFFF
             if stat.S_ISLNK(mode):
                 raise ValueError("Symlinks are not allowed in the archive")
+            target = _safe_member_path(root, info.filename)
+            if info.is_dir():
+                claim_directory(canonical)
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            if canonical in files:
+                raise ValueError(f"Duplicate archive member: {canonical}")
+            if canonical in directories:
+                raise ValueError(f"Archive member collides with a directory: {canonical}")
+            parent = PurePosixPath(canonical).parent.as_posix()
+            claim_directory("" if parent == "." else parent)
+            files.add(canonical)
             expanded += info.file_size
             if expanded > size_limit_bytes:
                 raise ValueError("Archive expands beyond the allowed size")
-            target = _safe_member_path(root, info.filename)
-            if info.is_dir():
-                if target.exists() and not target.is_dir():
-                    raise ValueError(f"Archive member collides with a file: {canonical}")
-                target.mkdir(parents=True, exist_ok=True)
-                continue
-            for parent in list(target.parents):
-                if parent == root:
-                    break
-                if parent.exists() and not parent.is_dir():
-                    raise ValueError(f"Archive member collides with a file: {canonical}")
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(info) as source, open(target, "wb") as destination:
                 shutil.copyfileobj(source, destination)

@@ -261,19 +261,62 @@ def test_runtime_compatibility_rejects_non_object_package_versions():
         assert_runtime_compatible({"packageVersions": ["torch==2.8.0"]}, {"packages": {}})
 
 
-def test_safe_extract_rejects_directory_colliding_with_a_file(tmp_path):
+@pytest.mark.parametrize(
+    ("members", "expected"),
+    [
+        # A file member whose own path is a directory an earlier member already created.
+        # This is the direction the first collision fix missed: it surfaced as
+        # IsADirectoryError from open(), escaping the boundary's ValueError contract.
+        ((("weights/adapter.safetensors", "payload"), ("weights", "file")), "a directory"),
+        # A file member nested under a path an earlier member already claimed as a file.
+        ((("weights", "file"), ("weights/adapter.safetensors", "payload")), "a file"),
+        # Explicit directory entry over an existing file member.
+        ((("weights", "file"), ("weights/", "")), "a file"),
+        # Explicit directory entry first, then a file member of the same name. Previously
+        # reported as a duplicate, which named the wrong defect.
+        ((("weights/", ""), ("weights", "file")), "a directory"),
+        # Deeply nested variant, to prove the check walks every path component.
+        ((("a/b/c.json", "{}"), ("a/b", "file")), "a directory"),
+    ],
+)
+def test_safe_extract_rejects_every_file_directory_collision(tmp_path, members, expected):
     archive = tmp_path / "collide.zip"
     with zipfile.ZipFile(archive, "w") as handle:
-        handle.writestr("weights", "file-not-a-directory")
-        handle.writestr("weights/adapter.safetensors", "payload")
-    with pytest.raises(ValueError, match="collides with a file"):
-        safe_extract_zip(archive, tmp_path / "out", size_limit_bytes=1024)
+        for name, payload in members:
+            handle.writestr(name, payload)
+    with pytest.raises(ValueError, match=f"collides with {expected}"):
+        safe_extract_zip(archive, tmp_path / "out", size_limit_bytes=4096)
 
 
-def test_safe_extract_rejects_file_colliding_with_a_directory_entry(tmp_path):
-    archive = tmp_path / "collide.zip"
+def test_safe_extract_still_reports_a_genuine_duplicate_as_a_duplicate(tmp_path):
+    archive = tmp_path / "dupe.zip"
     with zipfile.ZipFile(archive, "w") as handle:
-        handle.writestr("weights", "file-not-a-directory")
-        handle.writestr("weights/", "")
-    with pytest.raises(ValueError, match="collides with a file"):
-        safe_extract_zip(archive, tmp_path / "out", size_limit_bytes=1024)
+        handle.writestr("adapter_config.json", "{}")
+        handle.writestr("adapter_config.json", "{}")
+    with pytest.raises(ValueError, match="Duplicate archive member"):
+        safe_extract_zip(archive, tmp_path / "out", size_limit_bytes=4096)
+
+
+def test_safe_extract_accepts_an_ordinary_nested_archive(tmp_path):
+    archive = tmp_path / "ok.zip"
+    with zipfile.ZipFile(archive, "w") as handle:
+        handle.writestr("adapter_model.safetensors", "payload")
+        handle.writestr("tokenizer/", "")
+        handle.writestr("tokenizer/tokenizer.json", "{}")
+    root = safe_extract_zip(archive, tmp_path / "out", size_limit_bytes=4096)
+    assert (root / "tokenizer" / "tokenizer.json").is_file()
+
+
+def test_runtime_compatibility_reports_a_non_string_consumer_version(tmp_path):
+    versions = {
+        "torch": "2.8.0",
+        "transformers": "5.16.1",
+        "tokenizers": "0.23.2",
+        "peft": "0.20.0",
+        "bitsandbytes": "0.49.0",
+        "safetensors": "0.8.0",
+    }
+    with pytest.raises(ValueError, match="compatibility mismatch"):
+        assert_runtime_compatible(
+            {"packageVersions": versions}, {"packages": {**versions, "torch": 2}}
+        )

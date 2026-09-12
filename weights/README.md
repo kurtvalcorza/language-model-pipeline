@@ -14,7 +14,8 @@ weights/
     ├── vocab.json
     ├── merges.txt
     ├── dimer-base-manifest.json
-    ├── README.md (Model Card)
+    ├── README.md (Upstream Model Card)
+    ├── MODEL_CARD.md (DIMER Model Card Specification v1.0)
     ├── LICENSE
     └── model.safetensors (Excluded from Git; acquired via fetch_weights.py or DIMER upload)
 ```
@@ -22,8 +23,13 @@ weights/
 ## Available Base Model Snapshots
 
 - [**`qwen3-0.6b`**](qwen3-0.6b/): Dedicated snapshot for the default lightweight causal language model (`Qwen/Qwen3-0.6B`, ~590M parameters).
-  - [**Model Card & Specifications**](qwen3-0.6b/README.md): Full technical architecture, dual thinking-mode guidelines, ethical considerations, and Apache-2.0 license terms.
+  - [**DIMER Model Card**](qwen3-0.6b/MODEL_CARD.md): DIMER Model Card Specification v1.0 disclosures, limitations, metrics, and risks.
+  - [**Upstream Model Card**](qwen3-0.6b/README.md): Upstream architecture, usage, and Apache-2.0 license information.
   - [**Manifest**](qwen3-0.6b/dimer-base-manifest.json): Cryptographic record of byte counts and SHA-256 hashes for all snapshot files.
+- [**`smollm2-360m`**](smollm2-360m/): Dedicated snapshot for `HuggingFaceTB/SmolLM2-360M-Instruct` at the registry-pinned revision.
+  - [**DIMER Model Card**](smollm2-360m/MODEL_CARD.md): DIMER Model Card Specification v1.0 disclosures, limitations, metrics, and risks.
+  - [**Upstream Model Card**](smollm2-360m/README.md): Upstream training, evaluation, limitations, and Apache-2.0 license information.
+  - [**Manifest**](smollm2-360m/dimer-base-manifest.json): Cryptographic record of byte counts and SHA-256 hashes for all snapshot files.
 
 ## DIMER Architecture & Git Tracking Strategy
 

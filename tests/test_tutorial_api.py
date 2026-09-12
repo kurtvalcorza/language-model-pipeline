@@ -213,3 +213,110 @@ def test_external_adapter_consumption_and_registry_identity(tmp_path):
     assert manifest["totalBytes"] > 0
     entry = resolve_artifact_model(provenance)
     assert entry.key == "qwen3-1.7b"
+
+
+def test_manifest_verification_rejects_unlisted_nested_manifest(tmp_path):
+    # The file-set check used to exempt every file named artifact-manifest.json at any
+    # depth, so an unmanifested nested copy passed the "expected file set" guarantee.
+    root = tmp_path / "artifact"
+    _write_adapter_artifact(root)
+    verify_manifested_directory(root)
+    (root / "nested").mkdir()
+    (root / "nested" / "artifact-manifest.json").write_text('{"files": []}')
+    with pytest.raises(ValueError, match="Manifest/file-set mismatch"):
+        verify_manifested_directory(root)
+
+
+def test_manifest_verification_rejects_non_object_records(tmp_path):
+    root = tmp_path / "artifact"
+    _write_adapter_artifact(root)
+    (root / "artifact-manifest.json").write_text(
+        json.dumps({"files": ["adapter_config.json"], "totalBytes": 0})
+    )
+    with pytest.raises(ValueError, match="non-object file record"):
+        verify_manifested_directory(root)
+
+
+@pytest.mark.parametrize("supplied", [2, None, ["2.8.0"], ""])
+def test_runtime_compatibility_rejects_non_string_provenance_versions(supplied):
+    # Provenance arrives inside an externally supplied ZIP, so a hostile type must produce
+    # the module's ValueError contract rather than an AttributeError from `.split`.
+    producer = {
+        "packageVersions": {
+            "torch": supplied,
+            "transformers": "5.16.1",
+            "tokenizers": "0.23.2",
+            "peft": "0.20.0",
+            "bitsandbytes": "0.49.0",
+            "safetensors": "0.8.0",
+        }
+    }
+    current = {"packages": {"torch": "2.8.0"}}
+    with pytest.raises(ValueError, match="lacks runtime package versions"):
+        assert_runtime_compatible(producer, current)
+
+
+def test_runtime_compatibility_rejects_non_object_package_versions():
+    with pytest.raises(ValueError, match="must be an object"):
+        assert_runtime_compatible({"packageVersions": ["torch==2.8.0"]}, {"packages": {}})
+
+
+@pytest.mark.parametrize(
+    ("members", "expected"),
+    [
+        # A file member whose own path is a directory an earlier member already created.
+        # This is the direction the first collision fix missed: it surfaced as
+        # IsADirectoryError from open(), escaping the boundary's ValueError contract.
+        ((("weights/adapter.safetensors", "payload"), ("weights", "file")), "a directory"),
+        # A file member nested under a path an earlier member already claimed as a file.
+        ((("weights", "file"), ("weights/adapter.safetensors", "payload")), "a file"),
+        # Explicit directory entry over an existing file member.
+        ((("weights", "file"), ("weights/", "")), "a file"),
+        # Explicit directory entry first, then a file member of the same name. Previously
+        # reported as a duplicate, which named the wrong defect.
+        ((("weights/", ""), ("weights", "file")), "a directory"),
+        # Deeply nested variant, to prove the check walks every path component.
+        ((("a/b/c.json", "{}"), ("a/b", "file")), "a directory"),
+    ],
+)
+def test_safe_extract_rejects_every_file_directory_collision(tmp_path, members, expected):
+    archive = tmp_path / "collide.zip"
+    with zipfile.ZipFile(archive, "w") as handle:
+        for name, payload in members:
+            handle.writestr(name, payload)
+    with pytest.raises(ValueError, match=f"collides with {expected}"):
+        safe_extract_zip(archive, tmp_path / "out", size_limit_bytes=4096)
+
+
+def test_safe_extract_still_reports_a_genuine_duplicate_as_a_duplicate(tmp_path):
+    archive = tmp_path / "dupe.zip"
+    with zipfile.ZipFile(archive, "w") as handle:
+        handle.writestr("adapter_config.json", "{}")
+        handle.writestr("adapter_config.json", "{}")
+    with pytest.raises(ValueError, match="Duplicate archive member"):
+        safe_extract_zip(archive, tmp_path / "out", size_limit_bytes=4096)
+
+
+def test_safe_extract_accepts_an_ordinary_nested_archive(tmp_path):
+    archive = tmp_path / "ok.zip"
+    with zipfile.ZipFile(archive, "w") as handle:
+        handle.writestr("adapter_model.safetensors", "payload")
+        handle.writestr("tokenizer/", "")
+        handle.writestr("tokenizer/tokenizer.json", "{}")
+    root = safe_extract_zip(archive, tmp_path / "out", size_limit_bytes=4096)
+    assert (root / "tokenizer" / "tokenizer.json").is_file()
+
+
+def test_runtime_compatibility_reports_a_non_string_consumer_version(tmp_path):
+    versions = {
+        "torch": "2.8.0",
+        "transformers": "5.16.1",
+        "tokenizers": "0.23.2",
+        "peft": "0.20.0",
+        "bitsandbytes": "0.49.0",
+        "safetensors": "0.8.0",
+    }
+    with pytest.raises(ValueError, match="compatibility mismatch"):
+        assert_runtime_compatible(
+            {"packageVersions": versions}, {"packages": {**versions, "torch": 2}}
+        )

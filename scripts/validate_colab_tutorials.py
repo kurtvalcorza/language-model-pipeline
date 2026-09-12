@@ -32,6 +32,8 @@ PRIVATE_SOURCE_MARKERS = (
     "del _GITHUB_TOKEN",
 )
 
+TOKEN_BINDING = "_GITHUB_TOKEN"
+
 # Validate ownership boundaries semantically rather than depending on Black/Ruff import
 # wrapping. Both `from module import x` and `from module import (x, ...)` are valid and
 # exercise the same production surface.
@@ -194,6 +196,22 @@ def assert_profile(notebook: dict, expected: str, *, label: str) -> None:
         raise AssertionError(f"{label}: profile must also be visible to the learner")
 
 
+def assert_canonical_serialization(path: Path, *, label: str) -> None:
+    """Notebooks must stay diff-reviewable.
+
+    The tutorials are the reviewable deliverable of this repository, so their on-disk form
+    is a gate, not a preference: a minified notebook collapses every later change into a
+    single-line whole-file diff and makes line-level review and merge impossible.
+    """
+    raw = path.read_text(encoding="utf-8")
+    expected = json.dumps(json.loads(raw), indent=1, ensure_ascii=False) + "\n"
+    if raw != expected:
+        raise AssertionError(
+            f"{label}: {path.name} is not canonically serialized. Rewrite it with "
+            'json.dumps(notebook, indent=1, ensure_ascii=False) + "\\n".'
+        )
+
+
 def assert_markers(text: str, markers: tuple[str, ...], *, label: str) -> None:
     missing = [marker for marker in markers if marker not in text]
     if missing:
@@ -210,12 +228,60 @@ def assert_no_parallel_implementation(notebook: dict, *, label: str) -> None:
         raise AssertionError(f"{label}: forbidden executable/deserialization markers: {dangerous}")
 
 
+def _python_source(cell: dict) -> str:
+    return "\n".join(
+        line
+        for line in cell_source(cell).splitlines()
+        if not line.lstrip().startswith(("%", "!"))
+    )
+
+
+def assert_guaranteed_token_cleanup(notebook: dict, *, label: str) -> None:
+    """The token delete must be guaranteed, not merely present somewhere in the notebook.
+
+    A straight-line `del _GITHUB_TOKEN` after the clone leaks the secret into the notebook
+    namespace on every failure path, and a bad token and an unreachable revision both take
+    that path. Substring markers cannot tell the two forms apart: `finally:` and an indented
+    `del` match just as well when they belong to unrelated statements in different cells.
+    So this walks the AST and requires the delete to sit in the `finally` of the same `try`
+    that performs the checkout.
+    """
+    for index, cell in enumerate(notebook["cells"]):
+        if cell.get("cell_type") != "code" or TOKEN_BINDING not in cell_source(cell):
+            continue
+        for node in ast.walk(ast.parse(_python_source(cell))):
+            if not isinstance(node, ast.Try):
+                continue
+            checks_out = any(
+                isinstance(call.func, ast.Name) and call.func.id == "checkout_private_finetuner"
+                for statement in node.body
+                for call in ast.walk(statement)
+                if isinstance(call, ast.Call)
+            )
+            deletes_token = any(
+                isinstance(target, ast.Name) and target.id == TOKEN_BINDING
+                for statement in node.finalbody
+                for delete in ast.walk(statement)
+                if isinstance(delete, ast.Delete)
+                for target in delete.targets
+            )
+            if checks_out and deletes_token:
+                return
+        raise AssertionError(
+            f"{label}: code cell {index} binds {TOKEN_BINDING} without deleting it in the "
+            "`finally` of the try that performs the checkout, so a failed clone leaves the "
+            "secret bound for the rest of the session"
+        )
+    raise AssertionError(f"{label}: no code cell binds {TOKEN_BINDING}")
+
+
 def assert_secure_private_source(notebook: dict, *, label: str) -> None:
     code = code_text(notebook)
     forbidden = [marker for marker in FORBIDDEN_PRIVATE_SOURCE_PATTERNS if marker in code]
     if forbidden:
         raise AssertionError(f"{label}: insecure private-source bootstrap markers: {forbidden}")
     assert_markers(code, PRIVATE_SOURCE_MARKERS, label=f"{label} private source")
+    assert_guaranteed_token_cleanup(notebook, label=label)
     markdown = markdown_text(notebook)
     assert_markers(
         markdown,
@@ -318,6 +384,9 @@ def validate_notebooks() -> None:
     assert_profile(inference, "ARTIFACT-INFERENCE", label="inference")
     assert_lock_is_exact()
     assert_support_modules_are_orchestration_only()
+
+    for label, path in (("main", MAIN), ("inference", INFERENCE)):
+        assert_canonical_serialization(path, label=label)
 
     for label, notebook in (("main", main), ("inference", inference)):
         assert_clean_notebook(notebook, label=label)

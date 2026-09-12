@@ -32,6 +32,14 @@ PRIVATE_SOURCE_MARKERS = (
     "del _GITHUB_TOKEN",
 )
 
+# `del _GITHUB_TOKEN` on its own is satisfied by a straight-line delete after the clone,
+# which leaves the secret bound in the notebook namespace for the rest of the session
+# whenever the clone raises -- a bad token and an unreachable revision both take that path.
+TOKEN_CLEANUP_MARKERS = (
+    "finally:",
+    "    del _GITHUB_TOKEN",
+)
+
 # Validate ownership boundaries semantically rather than depending on Black/Ruff import
 # wrapping. Both `from module import x` and `from module import (x, ...)` are valid and
 # exercise the same production surface.
@@ -194,6 +202,22 @@ def assert_profile(notebook: dict, expected: str, *, label: str) -> None:
         raise AssertionError(f"{label}: profile must also be visible to the learner")
 
 
+def assert_canonical_serialization(path: Path, *, label: str) -> None:
+    """Notebooks must stay diff-reviewable.
+
+    The tutorials are the reviewable deliverable of this repository, so their on-disk form
+    is a gate, not a preference: a minified notebook collapses every later change into a
+    single-line whole-file diff and makes line-level review and merge impossible.
+    """
+    raw = path.read_text(encoding="utf-8")
+    expected = json.dumps(json.loads(raw), indent=1, ensure_ascii=False) + "\n"
+    if raw != expected:
+        raise AssertionError(
+            f"{label}: {path.name} is not canonically serialized. Rewrite it with "
+            'json.dumps(notebook, indent=1, ensure_ascii=False) + "\\n".'
+        )
+
+
 def assert_markers(text: str, markers: tuple[str, ...], *, label: str) -> None:
     missing = [marker for marker in markers if marker not in text]
     if missing:
@@ -216,6 +240,7 @@ def assert_secure_private_source(notebook: dict, *, label: str) -> None:
     if forbidden:
         raise AssertionError(f"{label}: insecure private-source bootstrap markers: {forbidden}")
     assert_markers(code, PRIVATE_SOURCE_MARKERS, label=f"{label} private source")
+    assert_markers(code, TOKEN_CLEANUP_MARKERS, label=f"{label} token cleanup")
     markdown = markdown_text(notebook)
     assert_markers(
         markdown,
@@ -318,6 +343,9 @@ def validate_notebooks() -> None:
     assert_profile(inference, "ARTIFACT-INFERENCE", label="inference")
     assert_lock_is_exact()
     assert_support_modules_are_orchestration_only()
+
+    for label, path in (("main", MAIN), ("inference", INFERENCE)):
+        assert_canonical_serialization(path, label=label)
 
     for label, notebook in (("main", main), ("inference", inference)):
         assert_clean_notebook(notebook, label=label)

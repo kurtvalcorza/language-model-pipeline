@@ -106,9 +106,15 @@ def assert_runtime_compatible(provenance: dict[str, Any], current: dict[str, Any
         or provenance.get("runtime", {}).get("packages")
         or {}
     )
+    if not isinstance(producer, dict):
+        raise ValueError("Artifact provenance package versions must be an object")
     consumer = current.get("packages") or {}
     required = ("torch", "transformers", "tokenizers", "peft", "bitsandbytes", "safetensors")
-    missing = [name for name in required if not producer.get(name)]
+    missing = [
+        name
+        for name in required
+        if not isinstance(producer.get(name), str) or not producer[name].strip()
+    ]
     if missing:
         raise ValueError(
             "Artifact provenance lacks runtime package versions: " + ", ".join(missing)
@@ -301,8 +307,15 @@ def safe_extract_zip(
                 raise ValueError("Archive expands beyond the allowed size")
             target = _safe_member_path(root, info.filename)
             if info.is_dir():
+                if target.exists() and not target.is_dir():
+                    raise ValueError(f"Archive member collides with a file: {canonical}")
                 target.mkdir(parents=True, exist_ok=True)
                 continue
+            for parent in list(target.parents):
+                if parent == root:
+                    break
+                if parent.exists() and not parent.is_dir():
+                    raise ValueError(f"Archive member collides with a file: {canonical}")
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(info) as source, open(target, "wb") as destination:
                 shutil.copyfileobj(source, destination)
@@ -314,6 +327,8 @@ def verify_manifested_directory(artifact_root: str | Path) -> dict[str, Any]:
     root = Path(artifact_root).resolve()
     manifest_path = root / "artifact-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise ValueError("Artifact manifest must be a JSON object")
     records = manifest.get("files")
     if not isinstance(records, list) or not records:
         raise ValueError("Artifact manifest has no file records")
@@ -321,6 +336,8 @@ def verify_manifested_directory(artifact_root: str | Path) -> dict[str, Any]:
     listed: set[str] = set()
     listed_bytes = 0
     for record in records:
+        if not isinstance(record, dict):
+            raise ValueError("Artifact manifest contains a non-object file record")
         member = record.get("path")
         if not isinstance(member, str) or member in listed:
             raise ValueError("Artifact manifest contains an invalid or duplicate path")
@@ -337,7 +354,7 @@ def verify_manifested_directory(artifact_root: str | Path) -> dict[str, Any]:
     on_disk = {
         path.relative_to(root).as_posix()
         for path in root.rglob("*")
-        if path.is_file() and path.name != "artifact-manifest.json"
+        if path.is_file() and path != manifest_path
     }
     if on_disk != listed or listed_bytes != manifest.get("totalBytes"):
         raise ValueError("Manifest/file-set mismatch")

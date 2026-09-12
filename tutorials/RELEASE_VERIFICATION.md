@@ -44,9 +44,14 @@ artifact, screenshot, or evidence note.**
 Static validation, a previous notebook revision, a warm developer cache, or a blocked attempt
 is not a substitute for clean-runtime evidence.
 
+**These notebooks ship on `main` in this state.** Merging them did not confer release-grade
+status and asserts no runtime PASS: the table above is the authority, and both rows still read
+*no passing clean-run record*. The outstanding execution is tracked in
+[issue #68](https://github.com/kurtvalcorza/language-model-pipeline/issues/68).
+
 ## Required E2E verification procedure
 
-1. Resolve the current PR #62 head and confirm exact-head CI is green.
+1. Resolve the current `main` head and confirm exact-head CI is green.
 2. Open `language_model_finetuning_colab.ipynb` at that exact 40-character candidate SHA.
 3. Start a new supported Google Colab CUDA runtime with the authorized `GITHUB_TOKEN` Secret;
    do not rely on previously installed package/model/source caches.
@@ -112,4 +117,4 @@ Reviewer/operator: <name or GitHub identity>
 No passing records are asserted yet. The most recent attempted external execution was correctly
 blocked before GPU use because it resolved the stale candidate
 `2c4c8309132022e6aec31e048349c64de9646b34`. That blocked attempt is not REL1/REL5 evidence.
-A new run must resolve the post-fix PR head and confirm its exact-head CI before execution.
+A new run must resolve the current `main` head and confirm its exact-head CI before execution.

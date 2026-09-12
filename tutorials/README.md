@@ -30,6 +30,15 @@ local token binding immediately after the immutable finetuner checkout is establ
 
 ## Open in Colab
 
+> **Before you click:** both notebooks require a CUDA GPU runtime **and** an authorized
+> `GITHUB_TOKEN` with read access to the private `language-model-finetuner` repository. Without
+> that access they cannot run — see
+> [Runtime and private-source prerequisite](#runtime-and-private-source-prerequisite) above.
+>
+> Neither notebook has a recorded clean-runtime execution yet. They are published as
+> **candidates**, not release-grade references; verification is tracked in
+> [issue #68](https://github.com/kurtvalcorza/language-model-pipeline/issues/68).
+
 [![Open Fine-Tuning Tutorial In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb)
 
 [![Open Artifact Inference In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb)

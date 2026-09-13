@@ -1,4 +1,4 @@
-"""Static validation for the standalone language-model Colab tutorials (NOTEBOOK_SPEC 1.1 §3.6).
+"""Static validation for the standalone language-model Colab tutorials (NOTEBOOK_SPEC 2.0 §4).
 
 The carrier-level checks (parity, manifest, pins, forbidden patterns) live in
 tools/validate_release_assets.py; this script keeps the repository's own semantic markers for the

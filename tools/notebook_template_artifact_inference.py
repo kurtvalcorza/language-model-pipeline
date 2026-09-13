@@ -23,6 +23,13 @@ TEMPLATE = {
     "stem": "language_model_artifact_inference",
     "notebook_name": "language_model_artifact_inference_colab.ipynb",
     "profile": "ARTIFACT-INFERENCE",
+    "mode": "GUIDED",
+    "run_all": (
+        "**Known NOTEBOOK_SPEC 2.0 gap (§19, SART1/RUN2):** the default path does not yet obtain a trusted sample adapter bundle automatically — with `ARTIFACT_DIR` empty, Section 4 opens an upload dialog for a bundle produced by the E2E tutorial; an executor sets `ARTIFACT_DIR` to a directory already in the runtime to skip the dialog. Until a published sample bundle is wired in, this notebook is a `Candidate`, not release-grade. Once the bundle is present, **Run all** installs the pinned dependencies, stages and digest-verifies the pinned base snapshot, verifies the bundle manifest before any state is deserialised, attaches the adapter to the verified base, validates new prompts into an input manifest, generates with the adapter off and on and with sampling, writes the evaluation report, and exports outputs and provenance — all inside this kernel, with no DIMER worker or service and no credential."
+    ),
+    "byod": (
+        "New-input BYOD is the `CUSTOM_PROMPT` form field in Section 6 (empty by default): your own prompt passes through the same validation, generation and export cells as the sample prompts. A user-supplied adapter bundle is the separate optional `ARTIFACT_DIR`/upload branch in Section 4, verified by `verify_artifact_bundle` before deserialisation. Uploads stay inside this runtime; do not upload confidential or restricted data unless you are authorised to process it here."
+    ),
     "title": "Language-Model Adapter — DIMER artifact inference tutorial (standalone)",
     "badges": [
         badge

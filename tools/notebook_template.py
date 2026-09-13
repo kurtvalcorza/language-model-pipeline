@@ -39,6 +39,13 @@ TEMPLATE = {
     "stem": "language_model_finetuning",
     "notebook_name": "language_model_finetuning_colab.ipynb",
     "profile": "E2E",
+    "mode": "GUIDED",
+    "run_all": (
+        "This notebook needs a CUDA runtime (Colab: Runtime > Change runtime type > T4 GPU) — it stops with a clear message otherwise (RUN11). Once that runtime is selected, **Run all** installs the pinned dependencies, stages and digest-verifies the pinned base snapshot, fetches the pinned public Filipino SFT tutorial sample from the Hugging Face Hub at an immutable dataset revision (`SAMPLE_LIMIT` = 120 rows), validates the train/eval splits into an input manifest, renders and masks the chat template, records a deterministic pre-adaptation baseline, attaches LoRA adapters and trains for one bounded epoch with the stated hyperparameters (QLoRA, seed 42), evaluates loss/perplexity base vs adapted as optimisation evidence only, generates for new prompts with the adapter off and on, exports the adapter bundle with its manifest and provenance, and reloads it against the pinned base revision to prove the fresh boundary. No repository clone, DIMER worker or service, credential, upload dialog or configuration edit is required (NOTEBOOK_SPEC 2.0 §5)."
+    ),
+    "byod": (
+        "After the sample workflow completes, set `USE_BYOD = True` in Section 4 and re-run from that cell to upload your own chat-format JSONL; it enters the same validation, split, masking, LoRA adaptation, evaluation, generation and export cells as the sample (DAT14). Expected schema, ceilings and privacy guidance are stated in the Prerequisites and in Section 4; the upload stays inside this runtime. BYOD is optional and never part of the default path."
+    ),
     "pipeline_class": "LanguageModelPipeline",
     "weights_key": "smollm2-360m",
     # generator /2: only the tutorial pipeline module is carried. The rest of `lmpipeline` (DIMER

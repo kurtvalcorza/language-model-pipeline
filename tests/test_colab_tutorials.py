@@ -65,29 +65,25 @@ def test_validator_is_code_cell_scoped():
     assert "RUN_NEW_PROMPT_INFERENCE" in code
 
 
-def test_smollm2_360m_is_default_and_llama_is_selectable():
+def test_smollm2_360m_is_pinned_and_registry_is_carried_for_reference():
     code = code_text(load_notebook(MAIN))
-    assert 'BASE_MODEL_KEY = "smollm2-360m"' in code
+    assert 'MODEL_KEY = "smollm2-360m"' in code
+    assert 'MODEL_ID = "HuggingFaceTB/SmolLM2-360M-Instruct"' in code
     assert '"smollm2-360m"' in code
     assert '"qwen3-0.6b"' in code
     assert '"smollm3-3b"' in code
     assert '"llama-3.2-3b-instruct"' in code
     assert '"meta-llama/Llama-3.2-3B-Instruct"' in code
+    # Standalone carrier: one pinned model, no per-run base-model dropdown and no credential path.
+    assert "BASE_MODEL_KEY" not in code
+    assert "HF_TOKEN" not in code
 
 
-def test_hf_secret_is_read_but_never_printed():
+def test_snapshot_manifest_identity_is_asserted_before_fetch():
     code = code_text(load_notebook(MAIN))
-    assert 'userdata.get("HF_TOKEN")' in code
-    assert 'print(HF_TOKEN)' not in code
-    assert '"HF_TOKEN": HF_TOKEN' not in code
-
-
-def test_dimer_zip_requires_identity_manifest():
-    code = code_text(load_notebook(MAIN))
-    assert '"dimer-base-manifest.json"' in code
-    assert '"dimer_hf_snapshot"' in code
-    assert "modelId" in code
-    assert "revision" in code
+    assert "dimer-base-manifest.json" in code
+    assert "dimer_hf_snapshot" in code
+    assert "if (MANIFEST['modelId'], MANIFEST['revision']) != (MODEL_ID, MODEL_REVISION):" in code
     assert "sha256" in code
 
 
@@ -95,10 +91,10 @@ def test_llama_dimer_zip_is_not_assumed_redistributable():
     code = code_text(load_notebook(MAIN))
     llama_start = code.index('"llama-3.2-3b-instruct"')
     llama_block = code[llama_start : llama_start + 1200]
-    assert '"dimer_zip":False' in llama_block
+    assert '"dimer_zip": False' in llama_block
 
 
-def test_training_method_form_is_not_integer_widget():
+def test_training_method_is_a_fixed_constant_not_a_widget():
     code = code_text(load_notebook(MAIN))
     training_lines = [
         line for line in code.splitlines()
@@ -106,29 +102,30 @@ def test_training_method_form_is_not_integer_widget():
     ]
     assert len(training_lines) == 1
     line = training_lines[0]
-    assert '# @param ["qlora"]' in line
+    assert line.strip() == "TRAINING_METHOD = 'qlora'"
     assert 'type:"integer"' not in line
 
 
 def test_tutorial_markdown_is_substantive():
     markdown = markdown_text(load_notebook(MAIN))
-    assert "What you will learn" in markdown
-    assert "For **Llama 3.2 3B Instruct**" in markdown
-    assert "What a successful run proves" in markdown
+    assert "**Learning objectives:**" in markdown
+    assert "**This notebook is standalone.**" in markdown
+    assert "Successful execution proves" in markdown
     assert len(markdown.split()) > 900
 
 
-def test_inference_notebook_supports_hf_secret_and_dimer_zip():
+def test_inference_notebook_verifies_bundle_against_the_pinned_base():
     code = code_text(load_notebook(INFERENCE))
-    assert 'userdata.get("HF_TOKEN")' in code
-    assert 'BASE_MODEL_SOURCE = "Pinned Hugging Face"' in code
-    assert '"dimer-base-manifest.json"' in code
+    assert "HF_TOKEN" not in code
+    assert "fetched = stage_missing_files(WEIGHTS_DIR, allow_download=True)" in code
+    assert "dimer-base-manifest.json" in code
+    assert "artifact_manifest, provenance = verify_artifact_bundle(bundle_dir)" in code
     assert "PeftModel.from_pretrained" in code
 
 
 def test_no_training_rows_written_to_artifact_code():
     code = code_text(load_notebook(MAIN))
     # Artifact publication should serialize model/tokenizer/metrics/provenance, not SPLITS.
-    artifact_section = code[code.index('Path("/content/dimer-lm-adapter.staging")') :]
-    assert 'write_text(json.dumps(SPLITS' not in artifact_section
-    assert 'json.dump(SPLITS' not in artifact_section
+    artifact_section = code[code.index("ADAPTER_DIR = Path('outputs') / 'adapter-bundle'") :]
+    assert "write_text(json.dumps(SPLITS" not in artifact_section
+    assert "json.dump(SPLITS" not in artifact_section

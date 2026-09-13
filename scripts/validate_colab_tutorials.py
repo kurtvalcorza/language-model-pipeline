@@ -1,4 +1,8 @@
-"""Static validation for the standalone language-model Colab tutorials."""
+"""Static validation for the standalone language-model Colab tutorials (NOTEBOOK_SPEC 1.1 §3.6).
+
+The carrier-level checks (parity, manifest, pins, forbidden patterns) live in
+tools/validate_release_assets.py; this script keeps the repository's own semantic markers for the
+two notebooks and is what tests/test_colab_tutorials.py drives."""
 
 from __future__ import annotations
 
@@ -18,11 +22,13 @@ MAIN_MARKERS = (
     '"qwen3-0.6b"',
     '"smollm3-3b"',
     '"llama-3.2-3b-instruct"',
-    'BASE_MODEL_KEY = "smollm2-360m"',
-    'userdata.get("HF_TOKEN")',
-    'MODEL_SOURCE = "Pinned Hugging Face"',
-    '"dimer-base-manifest.json"',
-    '"dimer_hf_snapshot"',
+    'MODEL_KEY = "smollm2-360m"',
+    'MODEL_ID = "HuggingFaceTB/SmolLM2-360M-Instruct"',
+    "fetched = stage_missing_files(WEIGHTS_DIR, allow_download=True)",
+    "snapshot = verify_snapshot(WEIGHTS_DIR)",
+    "pipe = LanguageModelPipeline.from_pretrained(weights_dir=WEIGHTS_DIR)",
+    "dimer-base-manifest.json",
+    "dimer_hf_snapshot",
     "trust_remote_code",
     "MAX_TOTAL_TRAIN_TOKENS = 50_000_000",
     "build_masked_example",
@@ -32,24 +38,27 @@ MAIN_MARKERS = (
     "RUN_NEW_PROMPT_INFERENCE",
     "artifact-manifest.json",
     "DATASET_DIGEST",
-    "Fresh base + adapter reload",
-    "GPT-5.6 Sol High",
+    "fresh base + adapter reload",
+    "validate_inputs(",
+    "evaluation_report(",
 )
 
 INFERENCE_MARKERS = (
     "EXPECTED_ARTIFACT_ZIP_SHA256",
-    'userdata.get("HF_TOKEN")',
-    'BASE_MODEL_SOURCE = "Pinned Hugging Face"',
-    '"dimer-base-manifest.json"',
-    '"dimer_hf_snapshot"',
-    "manifest_member_path",
+    "fetched = stage_missing_files(WEIGHTS_DIR, allow_download=True)",
+    "snapshot = verify_snapshot(WEIGHTS_DIR)",
+    "dimer-base-manifest.json",
+    "dimer_hf_snapshot",
+    "safe_member_path",
     "artifact-manifest.json",
     "trustRemoteCode",
     "trust_remote_code",
     "baseModelRevision",
     "PeftModel.from_pretrained",
     "SHA-256 mismatch",
-    "GPT-5.6 Sol High",
+    "verify_artifact_bundle(bundle_dir)",
+    "validate_prompts(",
+    "evaluation_report(None",
 )
 
 FORBIDDEN_CODE = (
@@ -57,12 +66,22 @@ FORBIDDEN_CODE = (
     "pickle.load",
     "pickle.loads",
     "torch.load(",
+    # NOTEBOOK_SPEC 1.1 ST1: the standalone carrier never clones, installs or imports the
+    # repository,
+    # and the pinned public base model needs no credential.
+    "git clone",
+    "github.com/kurtvalcorza",
+    "import lmpipeline",
+    "from lmpipeline",
+    "userdata.get(",
+    "HF_TOKEN",
+    "%pip",
 )
 
 EDUCATIONAL_MARKERS = (
-    "What you will learn",
+    "Learning objectives",
     "assistant-only",
-    "optimization",
+    "optimisation",
     "task quality",
     "base model",
     "tokenizer",
@@ -106,8 +125,6 @@ def compile_code_cells(notebook: dict, *, label: str) -> None:
         if cell.get("cell_type") != "code":
             continue
         source = cell_source(cell)
-        if source.lstrip().startswith("%pip"):
-            continue
         try:
             ast.parse(source)
         except SyntaxError as exc:

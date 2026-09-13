@@ -47,18 +47,36 @@ The registry deliberately has **no copy at the repo root**. One file, no drift.
 
 ## Standalone Colab tutorials
 
-The `tutorials/` directory provides an educational, standalone path through the same
-language-model SFT capability without requiring DIMER Workbench.
+The `tutorials/` directory provides an educational path through the same language-model SFT
+capability without requiring DIMER Workbench.
 
 [![Open Fine-Tuning Tutorial In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb)
 
 [![Open Artifact Inference In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb)
 
-The fine-tuning notebook covers approved-model resolution, sample/BYOD validation,
-tokenizer-aware checks, baseline generation, LoRA/QLoRA SFT, before/after generation,
-new-prompt inference, adapter-first export and fresh reload. The inference notebook verifies
-an exported artifact and reconstructs it from the exact pinned base revision without the
-training dataset. See [`tutorials/README.md`](tutorials/README.md).
+Both notebooks are declared under DIMER Notebook Specification 1.1 and are **standalone** (§3.6):
+`tools/build_notebook.py` generates them from `tools/notebook_template.py` /
+`tools/notebook_template_artifact_inference.py`, and each carries `src/lmpipeline/pipeline.py`
+verbatim, the pinned base identity (`HuggingFaceTB/SmolLM2-360M-Instruct` at revision
+`a10cc1512eabd3dde888204e902eca88bddb4951`), the snapshot's per-file SHA-256 manifest and the exact
+`pyproject.toml` runtime pins, so the exported `.ipynb` keeps working without this repository
+(parity enforced by `tests/test_notebook_parity.py`, `tests/test_companion_parity.py` and
+`tools/validate_release_assets.py`). `language_model_finetuning_colab.ipynb` (`E2E`) validates the
+pinned public sample or a gated BYOD JSONL set into an input manifest, masks the loss to assistant
+tokens, runs a readable QLoRA loop, writes an evaluation report (`sample-sanity` on the manufactured
+validation split), exports a manifested adapter bundle and proves a fresh reload against the verified
+base. `language_model_artifact_inference_colab.ipynb` (`ARTIFACT-INFERENCE`) verifies an externally
+produced bundle before any state is loaded, attaches it with no network fallback, validates new prompts
+and generates with the adapter off and on. BYOD is optional and gated off by default. See
+[`tutorials/README.md`](tutorials/README.md) for the registry and
+[`docs/release-verification.md`](docs/release-verification.md) for the release gate. The standalone
+tutorials pin one base model; the other registry entries are exercised by the DIMER worker.
+
+## Release status
+
+**Candidate.** Static/unit checks do not constitute clean-runtime notebook evidence. The clean-runtime
+runs of the two standalone tutorials are pending; complete `docs/release-verification.md` against the
+exact release revision before calling either notebook release-grade.
 
 ## Model selection
 
@@ -107,8 +125,8 @@ generation and integrity verification:
 # List all registered base models and status
 python scripts/fetch_weights.py --list
 
-# Download default base model (qwen3-1.7b) into weights/
-python scripts/fetch_weights.py
+# Download the tutorials' pinned base model (smollm2-360m) into weights/smollm2-360m/
+python scripts/fetch_weights.py --model smollm2-360m
 
 # Download a specific registered model (e.g., smollm3-3b)
 python scripts/fetch_weights.py --model smollm3-3b

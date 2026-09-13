@@ -1,0 +1,18 @@
+# Release-grade DIMER language-model tutorial runtime.
+#
+# All user-space dependencies are exact. Torch is also pinned semantically here, but the
+# notebooks VERIFY the Colab-provided CUDA build instead of reinstalling it: replacing an
+# accelerator-coupled torch wheel can break the runtime. The accepted local build suffix
+# (for example +cu126) is reported in provenance together with torch.version.cuda.
+torch==2.8.0
+transformers==5.16.1
+tokenizers==0.23.2
+huggingface-hub==1.30.0
+peft==0.20.0
+accelerate==1.14.0
+bitsandbytes==0.49.0
+safetensors==0.8.0
+datasets==4.8.5
+pandas==2.3.3
+PyYAML==6.0.3
+Jinja2==3.1.6

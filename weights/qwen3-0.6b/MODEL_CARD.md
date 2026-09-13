@@ -1,16 +1,41 @@
 ---
 license: apache-2.0
 base_model: Qwen/Qwen3-0.6B
-model_card_spec: "1.0"
+model_card_spec: "1.1"
 model_key: qwen3-0.6b
 base_model_revision: c1899de289a04d12100db370d81485cdf75e47ca
 approval_state: experimental
 ---
 
-# Qwen3-0.6B — DIMER Base Snapshot c1899de2
+# Qwen3-0.6B (DIMER Base Snapshot c1899de2) — Language Model (QLoRA Fine-Tuning & Adapter Inference)
 
-[![Hugging Face](https://img.shields.io/badge/Hugging_Face-Qwen3--0.6B-FFD21E)](https://huggingface.co/Qwen/Qwen3-0.6B/tree/c1899de289a04d12100db370d81485cdf75e47ca)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Qwen%2FQwen3--0.6B-ffcc4d?style=flat)](https://huggingface.co/Qwen/Qwen3-0.6B/tree/c1899de289a04d12100db370d81485cdf75e47ca)
+[![Upstream GitHub](https://img.shields.io/badge/Upstream%20GitHub-QwenLM%2FQwen3-181717?style=flat&logo=github&logoColor=white)](https://github.com/QwenLM/Qwen3)
+[![arXiv Paper](https://img.shields.io/badge/arXiv-2505.09388-b31b1b.svg)](https://arxiv.org/abs/2505.09388)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Pipeline](https://img.shields.io/badge/Pipeline-language--model--pipeline-2ea44f?style=flat&logo=github)](https://github.com/kurtvalcorza/language-model-pipeline)
+
+> [!WARNING]
+> ⚠️ **Provided for research, training, and evaluation purposes only.** Model weights are redistributed unmodified under their upstream license, which controls your use, including any commercial use or redistribution; the accompanying code and notebooks are released under this repository's license. All of it is supplied **"as is"**, without warranty of any kind, and has not been validated for production, clinical, or safety-critical use. Running the notebooks downloads third-party weights and datasets governed by their own licenses and consumes compute on your own Colab/Kaggle account. To the maximum extent permitted by law, the maintainers of this repository and the DIMER platform accept no liability for any damages arising from their use. Hosting implies no affiliation with or endorsement by the original authors.
+
+---
+
+## Interactive Colab Tutorials
+
+The pipeline repository provides two ready-to-run interactive Google Colab notebooks that fine-tune a pinned base snapshot with QLoRA, export the adapter, and reload it in a fresh process:
+
+- **QLoRA Fine-Tuning Tutorial**:  
+  [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb) [`language_model_finetuning_colab.ipynb`](https://github.com/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb)  
+  *Supervised QLoRA fine-tuning of the pinned base model on chat-formatted data (shipped Filipino Q&A pairs), with baseline comparison, adapter export, and fresh reload.*
+
+- **Adapter Artifact Inference Tutorial**:  
+  [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb) [`language_model_artifact_inference_colab.ipynb`](https://github.com/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb)  
+  *Consume an externally supplied PEFT adapter ZIP, verify its manifest and base-model provenance, attach it to the pinned base snapshot, and generate text; no training occurs.*
+
+> [!NOTE]
+> Both notebooks require a Colab GPU runtime (*Runtime ▸ Change runtime type ▸ T4 GPU*); QLoRA's 4-bit path uses float16 on a T4 and bfloat16 on Ampere or newer.
+
+---
 
 ###### Description
 

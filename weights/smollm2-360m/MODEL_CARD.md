@@ -1,7 +1,10 @@
 ---
 license: apache-2.0
 base_model: HuggingFaceTB/SmolLM2-360M-Instruct
+date_published: "2024-10-31"
+date_published_source: "Hugging Face Hub repository creation date of the exact hosted checkpoint (`createdAt`, https://huggingface.co/api/models/HuggingFaceTB/SmolLM2-360M-Instruct)"
 model_card_spec: "1.1"
+pipeline_tag: text-generation
 model_key: smollm2-360m
 base_model_revision: a10cc1512eabd3dde888204e902eca88bddb4951
 approval_state: experimental
@@ -13,7 +16,6 @@ approval_state: experimental
 [![Upstream GitHub](https://img.shields.io/badge/Upstream%20GitHub-huggingface%2Fsmollm-181717?style=flat&logo=github&logoColor=white)](https://github.com/huggingface/smollm)
 [![arXiv Paper](https://img.shields.io/badge/arXiv-2502.02737-b31b1b.svg)](https://arxiv.org/abs/2502.02737)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Pipeline](https://img.shields.io/badge/Pipeline-language--model--pipeline-2ea44f?style=flat&logo=github)](https://github.com/kurtvalcorza/language-model-pipeline)
 
 > [!WARNING]
 > ⚠️ **Provided for research, training, and evaluation purposes only.** Model weights are redistributed unmodified under their upstream license, which controls your use, including any commercial use or redistribution; the accompanying code and notebooks are released under this repository's license. All of it is supplied **"as is"**, without warranty of any kind, and has not been validated for production, clinical, or safety-critical use. Running the notebooks downloads third-party weights and datasets governed by their own licenses and consumes compute on your own Colab/Kaggle account. To the maximum extent permitted by law, the maintainers of this repository and the DIMER platform accept no liability for any damages arising from their use. Hosting implies no affiliation with or endorsement by the original authors.
@@ -37,7 +39,7 @@ The pipeline repository provides two ready-to-run interactive Google Colab noteb
 
 ---
 
-###### Description
+#### Description
 
 This package contains `HuggingFaceTB/SmolLM2-360M-Instruct` at immutable revision `a10cc1512eabd3dde888204e902eca88bddb4951`. It is the instruction-tuned member of the approximately 360-million-parameter SmolLM2 family, implemented by the packaged configuration as a decoder-only `LlamaForCausalLM`. At inference it renders a chat conversation and predicts successive output tokens. The upstream weights provide English-oriented language behavior; this repository adds an allowlisted DIMER key, pinned and verified offline acquisition, dataset and training contracts, and LoRA/QLoRA PEFT-adapter packaging. It does not retrain or claim authorship of the downloaded base weights.
 
@@ -83,7 +85,7 @@ The package separates upstream benchmark evidence, DIMER optimization telemetry,
 
 ###### Performance Measures
 
-The packaged upstream card reports zero-shot or stated few-shot results produced with `lighteval`, including IFEval, MT-Bench, HellaSwag, ARC, PIQA, MMLU, BBH, and GSM8K; this repository has not reproduced those values. A DIMER fine-tuning run instead reports `trainLoss`, `validationLoss`, optional `testLoss`, `trainPerplexity`, `validationPerplexity`, optional `testPerplexity`, `epochsCompleted`, `optimizerSteps`, `examplesProcessed`, `supervisedTokens`, `wallSeconds`, `examplesPerSecond`, and `peakGpuMemoryBytes`. These measure token prediction fit and execution cost. Operators must supply representative held-out tests or human rubrics for correctness, safety, factuality, and application utility because neither upstream benchmarks nor optimization loss proves those outcomes.
+The packaged upstream card reports zero-shot or stated few-shot results produced with `lighteval`, including IFEval, MT-Bench, HellaSwag, ARC, PIQA, MMLU, BBH, and GSM8K; this repository has not reproduced those values. A DIMER fine-tuning run instead reports `trainLoss`, `validationLoss`, optional `testLoss`, `trainPerplexity`, `validationPerplexity`, optional `testPerplexity`, `epochsCompleted`, `optimizerSteps`, `examplesProcessed`, `supervisedTokens`, `wallSeconds`, `examplesPerSecond`, and `peakGpuMemoryBytes`. These measure token prediction fit and execution cost. Operators must supply representative held-out tests or human rubrics for correctness, safety, factuality, and application utility because neither upstream benchmarks nor optimization loss proves those outcomes. In the standalone tutorials `evaluation_report` in `src/lmpipeline/pipeline.py` writes these metrics under those ids with the verdict `sample-sanity` (a validation split manufactured from the training source) or `not-measurable` when no held-out split was scored, naming the task-quality evidence that is missing.
 
 ###### Decision thresholds
 
@@ -110,6 +112,7 @@ This package is not intended, independently validated, certified, or cleared for
 - **Supply chain:** the registry allowlists `smollm2-360m`, pins a 40-character revision, requires SafeTensors, enforces `trust_remote_code=False`, and refuses fallback to a moving branch or unrelated cache entry.
 - **Snapshot integrity:** `dimer-base-manifest.json` records every other packaged file's byte count and SHA-256 digest; verification rejects missing, changed, extra, unsafe, and symlinked content.
 - **Input integrity:** normalization accepts declared conversational, prompt/completion, and instruction JSONL families, permits only `system`, `user`, and `assistant` roles, requires a non-empty assistant target, and rejects overlength examples instead of truncating them.
+- **Validation stage:** `validate_inputs` and `validate_prompts` in `src/lmpipeline/pipeline.py` apply the same checks the pipeline's `prepare_splits` and `generate` apply (roles, assistant targets, split leakage, sequence and token-budget ceilings, prompt ceilings) and write an input manifest before any model runs.
 - **Leakage and reproducibility:** canonical fingerprints report duplicates and reject cross-split overlap; provenance records the pinned model, dataset digest, effective job settings, package versions, and seeded operations.
 - **Refusals:** arbitrary Hub identifiers and remote-code models are rejected, and this unmeasured model stays internal-only. No class-balancing mechanism is claimed for generative SFT; dataset composition remains an operator decision.
 

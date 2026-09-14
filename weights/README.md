@@ -26,10 +26,10 @@ weights/
   - [**DIMER Model Card**](qwen3-0.6b/MODEL_CARD.md): DIMER Model Card Specification v1.0 disclosures, limitations, metrics, and risks.
   - [**Upstream Model Card**](qwen3-0.6b/README.md): Upstream architecture, usage, and Apache-2.0 license information.
   - [**Manifest**](qwen3-0.6b/dimer-base-manifest.json): Cryptographic record of byte counts and SHA-256 hashes for all snapshot files.
-- [**`smollm2-360m`**](smollm2-360m/): Dedicated snapshot for `HuggingFaceTB/SmolLM2-360M-Instruct` at the registry-pinned revision.
-  - [**DIMER Model Card**](smollm2-360m/MODEL_CARD.md): DIMER Model Card Specification v1.0 disclosures, limitations, metrics, and risks.
+- [**`smollm2-360m`**](smollm2-360m/): Dedicated snapshot for `HuggingFaceTB/SmolLM2-360M-Instruct` at the registry-pinned revision `a10cc1512eabd3dde888204e902eca88bddb4951` — the base model the standalone tutorials pin and carry inline.
+  - [**DIMER Model Card**](smollm2-360m/MODEL_CARD.md): DIMER Model Card Specification 1.1 disclosures, limitations, metrics, and risks.
   - [**Upstream Model Card**](smollm2-360m/README.md): Upstream training, evaluation, limitations, and Apache-2.0 license information.
-  - [**Manifest**](smollm2-360m/dimer-base-manifest.json): Cryptographic record of byte counts and SHA-256 hashes for all snapshot files.
+  - [**Manifest**](smollm2-360m/dimer-base-manifest.json): Cryptographic record of byte counts and SHA-256 hashes for the 13 upstream Hub files of the snapshot (the repository-authored `MODEL_CARD.md` is deliberately not listed: the standalone tutorials fetch every manifest entry from the Hub at the pinned revision and re-hash it before loading).
 
 ## DIMER Architecture & Git Tracking Strategy
 

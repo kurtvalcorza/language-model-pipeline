@@ -34,7 +34,10 @@ jobs:
           cache: pip
 
       - name: Install
-        run: pip install -e '.[dev]'
+        # The runtime pins now include torch/transformers/peft (the standalone notebooks carry them
+        # inline); the offline suite needs none of them, so install the light dev pins and the
+        # package without re-resolving dependencies.
+        run: pip install PyYAML==6.0.3 pytest==8.4.2 ruff==0.16.6 jsonschema==4.26.0 && pip install -e . --no-deps
 
       - name: Lint
         # Before the tests: ruff caught a `return X from exc` syntax error that the whole
@@ -43,6 +46,14 @@ jobs:
 
       - name: Tests
         run: pytest -p no:cacheprovider
+
+      - name: Validate tutorial and model-card source
+        run: python tools/validate_release_assets.py
+
+      - name: Standalone notebook parity (NOTEBOOK_SPEC 1.1 PAR3)
+        run: |
+          python tools/build_notebook.py --check
+          python tools/build_notebook.py --check --template tools/notebook_template_artifact_inference.py
 
       - name: Prove the suite needs no network
         # The fixture corpus is committed and the tests use a fake tokenizer specifically so
@@ -75,7 +86,7 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-      - run: pip install -e '.[dev]'
+      - run: pip install PyYAML==6.0.3 pytest==8.4.2 ruff==0.16.6 jsonschema==4.26.0 && pip install -e . --no-deps
 
       - name: Every schema is a valid schema
         run: |

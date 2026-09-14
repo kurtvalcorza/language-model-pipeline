@@ -19,6 +19,21 @@ from .licenses import (
     license_notice_markdown,
     obligations_for_license,
 )
+from .pipeline import (
+    DEFAULT_WEIGHTS_DIR,
+    INPUT_SCHEMA,
+    MODEL_ID,
+    MODEL_KEY,
+    MODEL_LICENSE,
+    MODEL_REVISION,
+    LanguageModelPipeline,
+    evaluation_report,
+    stage_missing_files,
+    validate_inputs,
+    validate_prompts,
+    verify_artifact_bundle,
+    verify_snapshot,
+)
 from .registry import ModelEntry, ModelRegistry
 from .result import Check, Result, write_result
 from .training_controls import (
@@ -37,6 +52,19 @@ CONTRACT_VERSION = "1.2"
 
 __all__ = [
     "CONTRACT_VERSION",
+    "DEFAULT_WEIGHTS_DIR",
+    "INPUT_SCHEMA",
+    "MODEL_ID",
+    "MODEL_KEY",
+    "MODEL_LICENSE",
+    "MODEL_REVISION",
+    "LanguageModelPipeline",
+    "evaluation_report",
+    "stage_missing_files",
+    "validate_inputs",
+    "validate_prompts",
+    "verify_artifact_bundle",
+    "verify_snapshot",
     "CONTROL_DEFAULTS",
     "INCLUDE_APPLICABLE_LICENSE_NOTICE",
     "LR_SCHEDULER_TYPES",

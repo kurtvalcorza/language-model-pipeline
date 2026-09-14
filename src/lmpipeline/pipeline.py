@@ -741,7 +741,8 @@ def _preload_nvidia_libs() -> None:
             if libs:
                 lib_paths = [str(p) for p in libs]
                 existing = os.environ.get("LD_LIBRARY_PATH", "")
-                os.environ["LD_LIBRARY_PATH"] = ":".join(lib_paths) + (":" + existing if existing else "")
+                prefix = ":".join(lib_paths)
+                os.environ["LD_LIBRARY_PATH"] = f"{prefix}:{existing}" if existing else prefix
             for so in nvidia_dir.rglob("lib*.so*"):
                 try:
                     ctypes.CDLL(str(so), mode=getattr(ctypes, "RTLD_GLOBAL", 0))

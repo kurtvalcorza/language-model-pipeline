@@ -5,6 +5,7 @@ date_published: "2024-10-31"
 date_published_source: "Hugging Face Hub repository creation date of the exact hosted checkpoint (`createdAt`, https://huggingface.co/api/models/HuggingFaceTB/SmolLM2-360M-Instruct)"
 model_card_spec: "1.1"
 pipeline_tag: text-generation
+task: "Others - Language Model"
 model_key: smollm2-360m
 base_model_revision: a10cc1512eabd3dde888204e902eca88bddb4951
 approval_state: experimental

@@ -5,6 +5,7 @@ date_published: "2025-04-27"
 date_published_source: "Hugging Face Hub repository creation date of the exact hosted checkpoint (`createdAt`, https://huggingface.co/api/models/Qwen/Qwen3-0.6B)"
 model_card_spec: "1.1"
 pipeline_tag: text-generation
+task: "Others - Language Model"
 model_key: qwen3-0.6b
 base_model_revision: c1899de289a04d12100db370d81485cdf75e47ca
 approval_state: experimental

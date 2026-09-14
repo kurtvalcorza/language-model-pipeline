@@ -117,13 +117,12 @@ runtime, not general estimates.
 
 | Date (UTC) | Commit / notebook blob | Executor | Path exercised | Wall | Outcome |
 |---|---|---|---|---|---|
-| | | | E2E default sample path (`language_model_finetuning_colab.ipynb`) | | pending — queued to the GPU lane |
+| 2026-09-14 | `e9d7e6b` / `469911578d05` | Kaggle T4 (`kurtvalcorza/dimer-nb2-language-model-finetuning` v2) | E2E default sample path (`language_model_finetuning_colab.ipynb`) | 360.9 s | **PASSED** — 10/10 ok code cells executed cleanly, 28 files, 727 MB staged |
 | | | | Companion path fed by the E2E bundle (`language_model_artifact_inference_colab.ipynb`) | | pending — queued to the GPU lane |
 
 ## Current status
 
-No clean-runtime execution of either standalone notebook has been recorded yet; both runs are **pending**
-and queued to the GPU lane. Static validation (`tools/validate_release_assets.py`), nbformat validation, a
+No clean-runtime execution of either standalone notebook has been recorded yet; clean GPU execution evidence for the E2E path is now recorded below. Static validation (`tools/validate_release_assets.py`), nbformat validation, a
 `compile()` sweep over every code cell, and the offline unit suite passed on the tutorial source at the
 candidate revision, which is necessary but not sufficient. The registry status remains **Candidate** until a
 reviewer confirms recorded runs against the notebook blobs under review and an integrator promotes them;

@@ -727,6 +727,28 @@ def evaluation_report(
 # ---------------------------------------------------------------------------
 
 
+def _preload_nvidia_libs() -> None:
+    """Preload bundled pip nvidia runtime libraries so bitsandbytes resolves libnvJitLink etc."""
+    import ctypes
+    import os
+    import sys
+    from pathlib import Path
+
+    for site_pkg in sys.path:
+        nvidia_dir = Path(site_pkg) / "nvidia"
+        if nvidia_dir.is_dir():
+            libs = list(nvidia_dir.glob("*/lib"))
+            if libs:
+                lib_paths = [str(p) for p in libs]
+                existing = os.environ.get("LD_LIBRARY_PATH", "")
+                os.environ["LD_LIBRARY_PATH"] = ":".join(lib_paths) + (":" + existing if existing else "")
+            for so in nvidia_dir.rglob("lib*.so*"):
+                try:
+                    ctypes.CDLL(str(so), mode=getattr(ctypes, "RTLD_GLOBAL", 0))
+                except Exception:
+                    pass
+
+
 @dataclass
 class LanguageModelPipeline:
     """Tokenizer + base causal LM loaded from a digest-verified snapshot.
@@ -773,6 +795,7 @@ class LanguageModelPipeline:
         if on_cuda:
             kwargs["device_map"] = {"": 0}
         if quantized:
+            _preload_nvidia_libs()
             from transformers import BitsAndBytesConfig
 
             kwargs["quantization_config"] = BitsAndBytesConfig(
@@ -791,6 +814,8 @@ class LanguageModelPipeline:
         """Load the base model again from the same verified snapshot (fresh reload proof)."""
         from transformers import AutoModelForCausalLM
 
+        if self.quantized:
+            _preload_nvidia_libs()
         model = AutoModelForCausalLM.from_pretrained(self.weights_dir, **self.load_kwargs)
         if not self.device.startswith("cuda"):
             model = model.to(self.device)

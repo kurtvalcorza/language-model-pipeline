@@ -12,3 +12,6 @@
 *.jsonl -text
 *.zip binary
 validation-datasets/adversarial/expected-codes.json -text
+
+# Snapshot files are digest-verified byte-for-byte against dimer-base-manifest.json; never convert their line endings.
+weights/** -text

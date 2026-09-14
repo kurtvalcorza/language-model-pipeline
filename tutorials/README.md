@@ -176,3 +176,7 @@ Once training completes and the self-contained adapter package is exported, you 
    Load the base model and dynamically attach the adapter in evaluation mode (`is_trainable=False`) as demonstrated in our companion [Artifact Inference](language_model_artifact_inference_colab.ipynb) tutorial.
 3. **Zero-Overhead Weight Merging:**
    Fuse the trained low-rank matrices into the base model weights with `model.merge_and_unload()` to get a standalone checkpoint with no PEFT dependency. Do this on a 16-bit copy of the base model, not on the 4-bit model the tutorial trains on: merging into quantized weights loses precision (the pitfall in the table above). Merge, `save_pretrained`, then convert (for example to GGUF) for llama.cpp or Ollama.
+
+## AI Assistance Disclosure
+
+This tutorial and its accompanying documentation were developed with generative AI assistance for code development and technical writing under maintainer direction. The maintainer remains responsible for reviewing the implementation, validating results, and making release decisions. AI assistance does not constitute independent verification, provider endorsement, or release approval.

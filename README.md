@@ -251,3 +251,7 @@ Pipeline Builder's Base Model field accepts free text (which decides whether the
 sentinel is viable at all), then the `runtime_dataset_format` blocker, then the documented
 upload quota, then resource profiles re-measured on approved hardware. Each needs portal
 access.
+
+## AI Assistance Disclosure
+
+This tutorial and its accompanying documentation were developed with generative AI assistance for code development and technical writing under maintainer direction. The maintainer remains responsible for reviewing the implementation, validating results, and making release decisions. AI assistance does not constitute independent verification, provider endorsement, or release approval.

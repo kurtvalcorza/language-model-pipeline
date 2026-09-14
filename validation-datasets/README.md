@@ -259,3 +259,7 @@ rebuilding could have.
 `create_system` is now pinned in both the packager and the fixture generator, verified by
 regenerating the whole corpus on Linux and on Windows and comparing: **9 of 9 archives
 byte-identical**. The `.jsonl` digests were never affected — only archives.
+
+## AI Assistance Disclosure
+
+This tutorial and its accompanying documentation were developed with generative AI assistance for code development and technical writing under maintainer direction. The maintainer remains responsible for reviewing the implementation, validating results, and making release decisions. AI assistance does not constitute independent verification, provider endorsement, or release approval.

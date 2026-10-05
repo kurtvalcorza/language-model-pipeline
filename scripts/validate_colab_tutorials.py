@@ -78,6 +78,11 @@ FORBIDDEN_CODE = (
     "%pip",
 )
 
+ISOLATED_ENV_DROP = (
+    'for name in ("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", '
+    '"HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"):'
+)
+
 EDUCATIONAL_MARKERS = (
     "Learning objectives",
     "assistant-only",
@@ -226,7 +231,9 @@ def validate_notebooks() -> None:
     for label, notebook in (("main", main), ("inference", inference)):
         assert_clean_notebook(notebook, label=label)
         compile_code_cells(notebook, label=label)
-        text = code_text(notebook)
+        # The isolated-runtime bootstrap names the token variables only to REMOVE them from the
+        # worker's environment (fleet sweep SWP-R); that one statement is not credential handling.
+        text = code_text(notebook).replace(ISOLATED_ENV_DROP, "")
         for forbidden in FORBIDDEN_CODE:
             if forbidden in text:
                 raise AssertionError(

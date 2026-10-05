@@ -20,8 +20,9 @@ CI runs `tools/validate_release_assets.py`, which checks:
   import on the primary path; exactly one cell tagged `embedded_module` equal to `src/lmpipeline/pipeline.py`
   after the generator's documented rewrite; the inline `MANIFEST` equal to
   `weights/smollm2-360m/dimer-base-manifest.json` and the inline `PINS` equal to the `pyproject.toml` runtime
-  pins; the notebook byte-identical to `tools/build_notebook.py` output for its template; the pinned-install
-  cell with its restart-on-stale-import guard; `NOTEBOOK_SOURCE` recorded in exports;
+  pins; the notebook byte-identical to `tools/build_notebook.py` output for its template; exactly one
+  kernel cell, which builds (or reuses) the hash-locked isolated environment from
+  `tutorials/requirements-isolated.lock.txt` and routes every later cell to it (no in-kernel install, no restart); `NOTEBOOK_SOURCE` recorded in exports;
 - `MODEL_ID`/`MODEL_REVISION` are bound only in the carried module cell (and repeated in the inline manifest,
   which the notebook asserts against the module before fetching), the revision is a 40-hex immutable commit,
   and the same identity string appears in `README.md`, `weights/smollm2-360m/MODEL_CARD.md` and

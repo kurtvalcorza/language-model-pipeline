@@ -19,17 +19,24 @@ _spec.loader.exec_module(_e2e_module)
 BADGES, REPO, _E2E = _e2e_module.BADGES, _e2e_module.REPO, _e2e_module.TEMPLATE
 
 TEMPLATE = {
-    **{k: _E2E[k] for k in ("package", "repo_name", "pipeline_class", "weights_key", "modules", "entry_module", "runtime_imports")},
+    **{k: _E2E[k] for k in ("package", "repo_name", "pipeline_class", "weights_key", "modules", "entry_module", "runtime_imports", "isolated_runtime", "infrastructure_labels", "managed_python", "uv", "lock")},
     "stem": "language_model_artifact_inference",
     "notebook_name": "language_model_artifact_inference_colab.ipynb",
     "profile": "ARTIFACT-INFERENCE",
     "mode": "GUIDED",
     "run_all": (
-        "**Known NOTEBOOK_SPEC 2.0 gap (§19, SART1/RUN2):** the default path does not yet obtain a trusted sample adapter bundle automatically — with `ARTIFACT_DIR` empty, Section 4 opens an upload dialog for a bundle produced by the E2E tutorial; an executor sets `ARTIFACT_DIR` to a directory already in the runtime to skip the dialog. Until a published sample bundle is wired in, this notebook is a `Candidate`, not release-grade. Once the bundle is present, **Run all** installs the pinned dependencies, stages and digest-verifies the pinned base snapshot, verifies the bundle manifest before any state is deserialised, attaches the adapter to the verified base, validates new prompts into an input manifest, generates with the adapter off and on and with sampling, writes the evaluation report, and exports outputs and provenance — all inside this kernel, with no DIMER worker or service and no credential."
+        "**Known NOTEBOOK_SPEC 2.0 gap (§19, SART1/RUN2):** the default path does not yet obtain a trusted sample adapter bundle automatically — with `ARTIFACT_DIR` empty, Section 4 opens an upload dialog for a bundle produced by the E2E tutorial; an executor sets `ARTIFACT_DIR` to a directory already in the runtime to skip the dialog. Until a published sample bundle is wired in, this notebook is a `Candidate`, not release-grade. Once the bundle is present, **Run all** builds an isolated environment from the hash-locked pins (nothing is installed into the notebook's own Python, so no restart is needed), stages and digest-verifies the pinned base snapshot, verifies the bundle manifest before any state is deserialised, attaches the adapter to the verified base, validates new prompts into an input manifest, generates with the adapter off and on and with sampling, writes the evaluation report, and exports outputs and provenance — all inside this runtime, with no DIMER worker or service and no credential."
     ),
     "byod": (
         "New-input BYOD is the `CUSTOM_PROMPT` form field in Section 6 (empty by default): your own prompt passes through the same validation, generation and export cells as the sample prompts. A user-supplied adapter bundle is the separate optional `ARTIFACT_DIR`/upload branch in Section 4, verified by `verify_artifact_bundle` before deserialisation. Uploads stay inside this runtime; do not upload confidential or restricted data unless you are authorised to process it here."
     ),
+    "guided": {
+        "opening": [
+            (
+                "**Who this notebook is for.** A learner (or a reviewer receiving someone else's fine-tune) who knows basic Python, has run a Colab notebook, and wants to use an adapter bundle safely: check what it is, check that it belongs to this base model, attach it, and see what it changes — without training anything. It is the companion of the fine-tuning notebook, which produces the bundle in a separate session. *Adapter*, *manifest*, *provenance*, *greedy* and *sampled decoding* are explained where they first matter and again in the **Glossary**. A T4 GPU is recommended; CPU works for a few prompts. The intended audience is learners and reviewers; a passing run does not certify a bundle for production.\n\n**Input → Model → Output.**\n\n| | What it is in this notebook |\n|---|---|\n| Input | an adapter bundle ZIP or folder produced outside this run (for example `language_model_finetuning_adapter_bundle.zip`), and new prompts typed into the form |\n| Model | the pinned SmolLM2-360M-Instruct base from the digest-verified snapshot, with the bundle's LoRA deltas attached in eval mode (no training) |\n| Output | the verified bundle provenance, base versus adapted answers (greedy) and two sampled answers, an input manifest, an evaluation report whose verdict is `not-measurable`, a result JSON and a generations CSV |\n\n**How to use this notebook.** Choose **Runtime → Change runtime type → T4 GPU** (CPU also works), then **Runtime → Run all**. Run all completes in one pass: Section 1 installs nothing into the notebook's own Python, so no restart is needed. Sections 1–3 are **infrastructure** — the isolated environment, the carried pipeline module and the pinned base snapshot — and their cells are collapsed. The learning path starts in Section 4, where you supply the bundle: leave `ARTIFACT_DIR` empty for the Colab upload dialog, or set it to a folder already in the runtime (Kaggle, Jupyter). Form fields (`# @param`) are the knobs. Before each principal result the notebook asks you to **Predict**; after it come **What to notice** and a collapsible **Check your reasoning**. No passing clean-run record exists yet for this notebook (`tutorials/RELEASE_VERIFICATION.md`), so the worked answers state what the code guarantees and what to expect qualitatively, not recorded numbers. **Troubleshooting**, a **Glossary** and a **Conclusion** template are at the end.\n\n**Roadmap:** 1–3 infrastructure → 4 supply the bundle and verify it before anything is loaded *(core concept: the trust boundary)* → 5 attach the adapter to the verified base → 6 validate new prompts into an input manifest → 7 adapter off versus on, greedy versus sampled, and why nothing is measured *(evaluation practice)*; export *(engineering)* → interpretation, troubleshooting, glossary, conclusion."
+            )
+        ]
+    },
     "title": "Language-Model Adapter — DIMER artifact inference tutorial (standalone)",
     "badges": [
         badge
@@ -72,7 +79,7 @@ TEMPLATE = {
         "`smollm2-360m` snapshot — a bundle trained on another base or revision is refused, not adapted."
     ),
     "prerequisites": [
-        "- **Runtime:** a fresh supported runtime (Google Colab or Jupyter, Python 3.12). A CUDA device is recommended (the base loads in 4-bit `nf4`, as it was trained); on CPU the module loads the base in float32, which is slower but works for a few prompts. The pinned `torch==2.14.0` install is the largest download of the run.",
+        "- **Runtime:** a fresh supported runtime (Google Colab or Jupyter, Python 3.12). A CUDA device is recommended (the base loads in 4-bit `nf4`, as it was trained); on CPU the module loads the base in float32, which is slower but works for a few prompts. Section 1 builds a separate environment from the hash-locked pins (nothing is installed into the notebook's own Python, so no restart is needed); its PyTorch CUDA wheels are the largest download of the run.",
         "- **Artifact:** an externally produced adapter bundle — the E2E tutorial writes `outputs/language_model_finetuning_adapter_bundle.zip` — supplied through the upload dialog, or as a directory already present in the runtime via `ARTIFACT_DIR` for non-interactive execution. Nothing in this notebook manufactures it.",
         "- **Data:** new prompts typed into the form (two Filipino prompts are prefilled). No dataset is bundled, because scoring self-generated rows would not be external-artifact evidence. Do not upload confidential or restricted data to a hosted notebook environment unless you are authorized to do so. Uploaded inputs remain in the notebook runtime; this pipeline does not send them to a third-party inference API.",
     ],
@@ -93,21 +100,33 @@ TEMPLATE = {
                 "rejected — the Hub can move it), and the base model and revision equal to the ones carried by the module. "
                 "A mismatch stops the notebook: an adapter attached to weights it was not trained on produces confident "
                 "nonsense rather than an error. The cell prints the provenance a consumer needs: format, base model and "
-                "revision, dataset digest and licence, training hyperparameters and the producer's runtime."
+                "revision, dataset digest and licence, training hyperparameters and the producer's runtime. With `ARTIFACT_DIR` "
+                "empty outside Colab, or a path that is not a folder, the cell stops with a message saying what to set.\n\n"
+                "**Predict:** a bundle trained on a different base model or revision arrives. At which step does the notebook stop it?\n\n"
+                "<details><summary>Check your reasoning</summary>\n\n"
+                "At `verify_artifact_bundle`, in this cell, before any weight is deserialised: the provenance's `baseModel` and "
+                "`baseModelRevision` must equal the identity carried by the module, otherwise it refuses to attach. Digests "
+                "prove the bundle is internally consistent; they do not prove who made it.\n\n"
+                "</details>"
             ),
             "code": (
                 "ARTIFACT_DIR = ''  # @param {{type:\"string\"}}\n"
                 "EXPECTED_ARTIFACT_ZIP_SHA256 = ''  # @param {{type:\"string\"}}\n"
                 "os.makedirs('outputs', exist_ok=True)\n"
                 "if ARTIFACT_DIR:\n"
-                "    bundle_dir = Path(ARTIFACT_DIR)\n"
+                "    bundle_dir = Path(ARTIFACT_DIR).expanduser()\n"
+                "    if not bundle_dir.is_dir():\n"
+                "        raise FileNotFoundError(f'ARTIFACT_DIR {{str(bundle_dir)!r}} is not a folder: give the folder that holds the bundle (with {{ARTIFACT_MANIFEST_NAME}}), or leave it empty to upload the ZIP on Colab')\n"
                 "    artifact_source = f'directory: {{bundle_dir}}'\n"
                 "    archive_sha = None\n"
                 "else:\n"
-                "    from google.colab import files\n"
-                "    uploaded = files.upload()\n"
+                "    try:\n"
+                "        from google.colab import files\n"
+                "    except ImportError:\n"
+                "        raise RuntimeError('ARTIFACT_DIR is empty and this runtime has no Colab upload dialog: set ARTIFACT_DIR to the folder holding the adapter bundle') from None\n"
+                "    uploaded = files.upload() or {{}}\n"
                 "    if len(uploaded) != 1:\n"
-                "        raise ValueError('Upload exactly one adapter bundle ZIP')\n"
+                "        raise ValueError(f'Upload exactly one adapter bundle ZIP; got {{len(uploaded)}} ({{sorted(uploaded) or \"upload cancelled or empty\"}})')\n"
                 "    archive_path = Path('work') / Path(next(iter(uploaded))).name\n"
                 "    archive_path.parent.mkdir(parents=True, exist_ok=True)\n"
                 "    archive_path.write_bytes(next(iter(uploaded.values())))\n"
@@ -135,7 +154,13 @@ TEMPLATE = {
                 "Section 3 loaded from the digest-verified snapshot with `PeftModel.from_pretrained(..., is_trainable=False)` "
                 "in eval mode. There is **no network fallback**: the only acceptable base weights are the files named by the "
                 "inline manifest. The cell prints the adapter configuration and confirms that the adapter's `B` matrices are "
-                "not all zero — an untrained or mis-saved adapter would be indistinguishable from the base model."
+                "not all zero — an untrained or mis-saved adapter would be indistinguishable from the base model.\n\n"
+                "**Predict:** will the printed `r` and `lora_alpha` match the fine-tuning notebook's defaults?\n\n"
+                "<details><summary>Check your reasoning</summary>\n\n"
+                "For a bundle made by the fine-tuning notebook with its defaults, yes: `r` 8 and `lora_alpha` 16, on the "
+                "attention and MLP projections. Whatever the values, they come from the bundle's own `adapter_config.json`, "
+                "which the manifest has already digest-checked.\n\n"
+                "</details>"
             ),
             "code": (
                 "model = pipe.load_adapter(bundle_dir)\n"
@@ -157,7 +182,12 @@ TEMPLATE = {
                 "written to `outputs/{stem}_input_manifest.json`. To show what rejection looks like, the cell also validates "
                 "a blank prompt and records the pipeline's own error message as a finding. Type your own prompt into "
                 "`CUSTOM_PROMPT`; the two prefilled prompts are new to the adapter (they were not in the tutorial's training "
-                "sample)."
+                "sample).\n\n"
+                "**Predict:** will the blank-prompt probe be accepted?\n\n"
+                "<details><summary>Check your reasoning</summary>\n\n"
+                "No: a prompt must be a non-empty user turn, so the probe is rejected and the pipeline's own message is "
+                "recorded under `findings`, while the real prompts are accepted with their token counts.\n\n"
+                "</details>"
             ),
             "code": (
                 "CUSTOM_PROMPT = ''  # @param {{type:\"string\"}}\n"
@@ -196,7 +226,15 @@ TEMPLATE = {
                 "to `outputs/{stem}_evaluation_report.json`. The result JSON records the artifact identity and digests, the "
                 "provenance the bundle carried, every prompt with its base, adapted and sampled answers, the input "
                 "manifest, the notebook's source, the model identity, licence and runtime; the CSV keeps one row per "
-                "prompt and answer kind. No credentials are recorded."
+                "prompt and answer kind. No credentials are recorded.\n\n"
+                "**Predict:** will the two sampled answers be identical? Which verdict will the evaluation report give?\n\n"
+                "**What to notice:** language and register in each BASE/ADAPTED pair, and any repeated phrase in the greedy "
+                "answers.\n\n"
+                "<details><summary>Check your reasoning</summary>\n\n"
+                "The sampled answers differ from each other (sampling is random by design), while the greedy pair is "
+                "reproducible on the same weights and runtime. The verdict is `not-measurable`: no labelled prompts exist "
+                "here, so the answers are qualitative evidence of what the adapter changes, not a score.\n\n"
+                "</details>"
             ),
             "code": (
                 "import csv\n\n"
@@ -260,15 +298,39 @@ TEMPLATE = {
         "supplied prompts, execute the public generation path with the adapter off and on, and emit the shown "
         "machine-readable outputs in the tested runtime. It does **not** establish benchmark superiority, deployment "
         "calibration, safety for high-consequence decisions, or production fitness on an unseen domain.\n\n"
-        "**When a check fails:** `Whole-ZIP SHA-256 mismatch` — the archive is not the one whose digest you were given; get "
+        "## Troubleshooting\n\n"
+        "Section 1 stops with `This notebook needs a Linux x86_64 runtime`: use Google Colab, Kaggle or a Linux Jupyter host. "
+        "`The pinned uv wheel failed its size/SHA-256 check`: run Section 1 again; if it repeats, the download is being "
+        "altered. `The isolated environment's Python process exited`: the worker crashed, usually out of memory — restart "
+        "the session and choose **Run all**. `ARTIFACT_DIR is empty and this runtime has no Colab upload dialog` or `… is "
+        "not a folder`: set `ARTIFACT_DIR` to the folder holding the bundle. `Upload exactly one adapter bundle ZIP`: the "
+        "upload was cancelled, empty or held several files.\n\n"
+        "When a bundle check fails: `Whole-ZIP SHA-256 mismatch` — the archive is not the one whose digest you were given; get "
         "it again, do not \"fix\" the expected hash. `SHA-256 mismatch: <file>` — a file inside the bundle differs from its "
         "manifest entry; the bundle was altered or corrupted in transit. `Manifest/file-set mismatch` — files were added or "
         "removed. `refusing to attach` — the adapter was trained on a different base model or revision than this pipeline "
         "pins; use the matching pipeline. `40-character commit SHA` — the producer recorded a branch name; the bundle is "
         "not reproducibly attributable.\n\n"
-        "**Next experiments:** compare the greedy adapted answer with several sampled ones and note which loops; type a "
+        "## Change one thing (next experiments)\n\n"
+        "Compare the greedy adapted answer with several sampled ones and note which loops; type a "
         "prompt in English and see whether the adapter still answers in Filipino; hand the same prompts and a labelled "
         "answer key to your own evaluation to obtain a measurable verdict.\n\n"
+        "## Glossary\n\n"
+        "- **Adapter (PEFT / LoRA):** small low-rank delta weights that only mean something on top of one base model at one revision.\n"
+        "- **Adapter bundle:** the adapter weights, config, tokenizer, metrics and provenance plus `artifact-manifest.json`.\n"
+        "- **Manifest:** the list of every bundle file with its byte size and SHA-256; any extra, missing or altered file is refused.\n"
+        "- **Provenance:** who-made-it-from-what facts carried by the bundle: base model and revision, dataset digest and licence, hyperparameters, producer runtime.\n"
+        "- **Trust boundary:** the line between checks that prove consistency (digests, identity) and the trust you place in the producer, which no check provides.\n"
+        "- **Greedy decoding:** always the most likely next token; reproducible, used for the off/on comparison.\n"
+        "- **Sampled decoding:** drawing the next token from the distribution (`temperature`, `top_p`, `top_k`); what a product would use.\n"
+        "- **Input manifest:** the JSON record of which prompts were validated, against which ceilings, with what verdict.\n"
+        "- **Isolated environment:** the separate hash-locked Python environment built in Section 1; every later cell runs there.\n\n"
+        "## Conclusion (your notes)\n\n"
+        "1. Which checks ran before any adapter weight was loaded, and what does each one rule out?\n"
+        "2. What did the adapter change in the answers, and how sure can you be without labelled prompts?\n"
+        "3. Which of your predictions were wrong?\n"
+        "4. What would you ask the bundle's producer for before using it in production?\n\n"
+        "**Your notes:**\n\n"
         "## References\n\n"
         f"- Repository README: https://github.com/kurtvalcorza/{REPO}/blob/main/README.md\n"
         f"- Repository model card: https://github.com/kurtvalcorza/{REPO}/blob/main/weights/smollm2-360m/MODEL_CARD.md\n"

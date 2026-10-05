@@ -40,12 +40,34 @@ TEMPLATE = {
     "notebook_name": "language_model_finetuning_colab.ipynb",
     "profile": "E2E",
     "mode": "GUIDED",
+    "isolated_runtime": True,
+    "infrastructure_labels": True,
+    # The fleet's uv isolated-environment mechanism (bioclip2-biodiversity-pipeline, siglip-v1-zero-shot-pipeline): a
+    # managed CPython, a size- and SHA-256-verified uv wheel, and a lock compiled from the pyproject pins with
+    # `uv pip compile pyproject.toml --python-version 3.12 --python-platform x86_64-manylinux_2_28 --generate-hashes
+    # --only-binary :all: -o tutorials/requirements-isolated.lock.txt`. (tutorials/requirements-colab.lock is the older,
+    # separate runtime declaration read by lmpipeline.tutorial_api; it is not what the notebooks install.)
+    "managed_python": "3.12.12",
+    "uv": {
+        "version": "0.12.15",
+        "url": "https://files.pythonhosted.org/packages/1e/fd/432451d732917c49152a291de3ef171aa6b0f1a22d39780fb2c1f085ca4c/uv-0.12.15-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "bytes": 20081404,
+        "sha256": "aee9802f46bae436bd91751bb33ddeb379ef1596b5c19df193219d545d244b60",
+    },
+    "lock": "tutorials/requirements-isolated.lock.txt",
     "run_all": (
-        "This notebook needs a CUDA runtime (Colab: Runtime > Change runtime type > T4 GPU) — it stops with a clear message otherwise (RUN11). Once that runtime is selected, **Run all** installs the pinned dependencies, stages and digest-verifies the pinned base snapshot, fetches the pinned public Filipino SFT tutorial sample from the Hugging Face Hub at an immutable dataset revision (`SAMPLE_LIMIT` = 120 rows), validates the train/eval splits into an input manifest, renders and masks the chat template, records a deterministic pre-adaptation baseline, attaches LoRA adapters and trains for one bounded epoch with the stated hyperparameters (QLoRA, seed 42), evaluates loss/perplexity base vs adapted as optimisation evidence only, generates for new prompts with the adapter off and on, exports the adapter bundle with its manifest and provenance, and reloads it against the pinned base revision to prove the fresh boundary. No repository clone, DIMER worker or service, credential, upload dialog or configuration edit is required (NOTEBOOK_SPEC 2.0 §5)."
+        "This notebook needs a CUDA runtime (Colab: Runtime > Change runtime type > T4 GPU) — it stops with a clear message otherwise (RUN11). Once that runtime is selected, **Run all** builds an isolated environment from the hash-locked pins (nothing is installed into the notebook's own Python, so no restart is needed and Run all completes in one pass), stages and digest-verifies the pinned base snapshot, fetches the pinned public Filipino SFT tutorial sample from the Hugging Face Hub at an immutable dataset revision (`SAMPLE_LIMIT` = 120 rows), validates the train/eval splits into an input manifest, renders and masks the chat template, records a deterministic pre-adaptation baseline, attaches LoRA adapters and trains for one bounded epoch with the stated hyperparameters (QLoRA, seed 42), evaluates loss/perplexity base vs adapted as optimisation evidence only, generates for new prompts with the adapter off and on, exports the adapter bundle with its manifest and provenance, and reloads it against the pinned base revision to prove the fresh boundary. No repository clone, DIMER worker or service, credential, upload dialog or configuration edit is required (NOTEBOOK_SPEC 2.0 §5)."
     ),
     "byod": (
         "After the sample workflow completes, set `USE_BYOD = True` in Section 4 and re-run from that cell to upload your own chat-format JSONL; it enters the same validation, split, masking, LoRA adaptation, evaluation, generation and export cells as the sample (DAT14). Expected schema, ceilings and privacy guidance are stated in the Prerequisites and in Section 4; the upload stays inside this runtime. BYOD is optional and never part of the default path."
     ),
+    "guided": {
+        "opening": [
+            (
+                "**Who this notebook is for.** A learner who knows basic Python, has run a Colab notebook, and wants to adapt an open instruction-tuned language model to their own conversations with QLoRA on a free T4 GPU — and to see exactly which tokens are trained, what the loss numbers do and do not mean, and how the adapter is shipped and reloaded. No transformer internals are assumed: *LoRA*, *QLoRA*, *chat template*, *loss masking* and *perplexity* are explained where they first matter and again in the **Glossary** at the end. A CUDA GPU is required (a Colab T4 is enough). The intended audience is learners and practitioners trying QLoRA for the first time; this is a teaching run, not a production fine-tuning recipe.\n\n**Input → Model → Output.**\n\n| | What it is in this notebook |\n|---|---|\n| Input | 120 chat-formatted conversations (default: the pinned public Filipino Q&A sample, 96 for training and 24 held out; BYOD: your `train.jsonl` with optional validation and test files) and the training knobs in Section 4 |\n| Model | the pinned SmolLM2-360M-Instruct base frozen in 4-bit `nf4`, plus small trainable LoRA matrices on the attention and MLP projections, trained by a plain PyTorch loop with assistant-only loss |\n| Output | an adapter bundle (LoRA weights, tokenizer, metrics, provenance, a SHA-256 manifest) and its ZIP; train and validation loss and perplexity; base versus adapted answers; an evaluation report; a result JSON and a probe CSV |\n\n**How to use this notebook.** Choose **Runtime → Change runtime type → T4 GPU**, then **Runtime → Run all**. Run all completes in one pass: Section 1 installs nothing into the notebook's own Python, so no restart is needed. Sections 1–3 are **infrastructure** — the isolated environment, the carried pipeline module and the pinned base snapshot — and their cells are collapsed; you may run them without studying them. The learning path starts in Section 4. Form fields (`# @param`) are the knobs: change one and re-run from that cell down. Re-running Section 6 or 7 starts again from the frozen base model, so a baseline is never taken from an adapted model and a second training run never stacks on the first. Before each principal result the notebook asks you to **Predict**; after it come **What to notice** and a collapsible **Check your reasoning**. No passing clean-run record exists yet for this notebook (`tutorials/RELEASE_VERIFICATION.md`), so the worked answers state what the code guarantees and what to expect qualitatively, not recorded numbers — compare them with your own run. **Troubleshooting**, a **Glossary** and a **Conclusion** template are at the end. Writing your predictions down is optional.\n\n**Roadmap:** 1–3 infrastructure → 4 knobs and data (or bring your own) → 5 validation, chat template and assistant-only loss masking *(core concept)* → 6 a deterministic baseline *(evaluation practice)* → 7 LoRA adapters and the training loop *(core concept)* → 8 the evaluation report: optimisation evidence, not task quality *(evaluation practice)* → 9 new prompts with the adapter off and on → 10 export the adapter bundle and prove a fresh reload *(engineering)* → interpretation, troubleshooting, glossary, conclusion."
+            )
+        ]
+    },
     "pipeline_class": "LanguageModelPipeline",
     "weights_key": "smollm2-360m",
     # generator /2: only the tutorial pipeline module is carried. The rest of `lmpipeline` (DIMER
@@ -91,10 +113,9 @@ TEMPLATE = {
         "correct), serving, and any base model other than the pinned `smollm2-360m` snapshot."
     ),
     "prerequisites": [
-        "- **Runtime:** a Colab GPU runtime (*Runtime ▸ Change runtime type ▸ T4 GPU*) or another CUDA machine; QLoRA needs `bitsandbytes` 4-bit kernels, so the training cell stops on CPU. Python 3.12 is the executed configuration. The pinned `torch==2.14.0` install is the largest download of the run.",
+        "- **Runtime:** a Colab GPU runtime (*Runtime ▸ Change runtime type ▸ T4 GPU*) or another CUDA machine; QLoRA needs `bitsandbytes` 4-bit kernels, so the training cell stops on CPU. Python 3.12 is the executed configuration. Section 1 builds a separate environment from the hash-locked pins (nothing is installed into the notebook's own Python, so no restart is needed); its PyTorch CUDA wheels are the largest download of the run.",
         "- **Knowledge:** Python functions, dictionaries and list comprehensions; what a language model does at a high level (predicts the next token). Transformer internals are not required.",
-        "- **Data:** the default sample is the pinned public `jpaulpoliquit/ph-sft-ai-authored-v1` table (513 AI-authored Filipino/English Q&A rows, Apache-2.0), fetched from the Hugging Face Hub at an immutable dataset revision; `Sample: Dolly` (`databricks-dolly-15k`, CC-BY-SA 3.0 — adapters trained on it inherit the share-alike condition) is the alternative. Optional BYOD upload is gated off by default so the sample path runs top-to-bottom without interaction. Expected BYOD input: `train.jsonl` (plus optional `validation.jsonl`/`val.jsonl` and `test.jsonl`), each line a `messages`, `prompt`/`completion` or `instruction`/`input`/`output` record, uploaded as files or one ZIP. Do not upload confidential or restricted data to a hosted notebook environment unless you are authorized to do so. Uploaded inputs remain in the notebook runtime; this pipeline does not send them to a third-party inference API.",
-        "- **How to use this notebook:** cells with a form on the right (`# @param`) are the knobs; change them and re-run from that cell down. Run the cells in order the first time — each section says what the next cell does before it runs and what to look for after.",
+        "- **Data:** the default sample is the pinned public `jpaulpoliquit/ph-sft-ai-authored-v1` table (513 AI-authored Filipino/English Q&A rows, Apache-2.0), fetched from the Hugging Face Hub at an immutable dataset revision; `Sample: Dolly` (`databricks-dolly-15k`, CC-BY-SA 3.0 — adapters trained on it inherit the share-alike condition) is the alternative. Optional BYOD is gated off by default so the sample path runs top-to-bottom without interaction; it reads a folder or ZIP from `BYOD_PATH` (Kaggle, Jupyter) or, when that is empty on Colab, the upload dialog. Expected BYOD input: `train.jsonl` (plus optional `validation.jsonl`/`val.jsonl` and `test.jsonl`), each line a `messages`, `prompt`/`completion` or `instruction`/`input`/`output` record, uploaded as files or one ZIP. Do not upload confidential or restricted data to a hosted notebook environment unless you are authorized to do so. Uploaded inputs remain in the notebook runtime; this pipeline does not send them to a third-party inference API.",
     ],
     "cells": [
         {
@@ -114,12 +135,24 @@ TEMPLATE = {
                 "the training source*: its loss is an optimisation signal, not a task-quality measurement. BYOD files are "
                 "read as JSONL; a `validation.jsonl` is used when present, otherwise a fifth of `train.jsonl` is held out. Look "
                 "for the split sizes (`{{'train': 96, 'validation': 24}}` with the defaults) and the 16-character dataset "
-                "digest prefix — the identity of this exact dataset."
+                "digest prefix — the identity of this exact dataset.\n\n"
+                "For BYOD, set `BYOD_PATH` to a folder holding `train.jsonl` (plus optional `validation.jsonl`/`val.jsonl` and "
+                "`test.jsonl`) or to one ZIP of them (Kaggle, Jupyter); leave it empty on Colab to get the upload dialog. A "
+                "cancelled upload, a runtime without the dialog, a missing `train.jsonl` and a malformed JSONL line are refused "
+                "with a message naming the file, the line and the rule.\n\n"
+                "**Predict:** with the defaults (`SAMPLE_LIMIT` = 120), how many rows will land in each split?\n\n"
+                "<details><summary>Check your reasoning</summary>\n\n"
+                "`manufacture_validation` holds out one fifth, so 120 collected rows split into 96 for training and 24 for "
+                "validation. If some sample rows are longer than `MAX_SEQUENCE_LENGTH` tokens the cell reports how many it set "
+                "aside, but it keeps walking until it has 120 that fit, so the split sizes do not change.\n\n"
+                "</details>"
             ),
             "code": (
                 "import hashlib\n"
                 "import io\n\n"
                 "USE_BYOD = False  # @param {{type:\"boolean\"}}\n"
+                "# Kaggle / Jupyter: a folder holding train.jsonl (+ optional validation/test files) or one ZIP. Empty: the Colab upload dialog.\n"
+                "BYOD_PATH = ''  # @param {{type:\"string\"}}\n"
                 "DATA_SOURCE = \"Sample: Filipino SFT\"  # @param [\"Sample: Filipino SFT\",\"Sample: Dolly\"]\n"
                 "SAMPLE_LIMIT = 120  # @param {{type:\"integer\"}}\n"
                 "MAX_SEQUENCE_LENGTH = 512  # @param {{type:\"integer\"}}\n"
@@ -138,22 +171,47 @@ TEMPLATE = {
                 "WORK_DIR = Path('work')\n"
                 "shutil.rmtree(WORK_DIR, ignore_errors=True)\n"
                 "WORK_DIR.mkdir()\n\n"
+                "BYOD_FILES = ('train.jsonl', 'validation.jsonl', 'val.jsonl', 'test.jsonl')\n\n"
                 "if USE_BYOD:\n"
-                "    from google.colab import files\n"
-                "    uploaded = files.upload()\n"
                 "    byod_root = WORK_DIR / 'byod'\n"
                 "    byod_root.mkdir()\n"
-                "    if len(uploaded) == 1 and next(iter(uploaded)).lower().endswith('.zip'):\n"
-                "        zip_path = WORK_DIR / 'data.zip'\n"
-                "        zip_path.write_bytes(next(iter(uploaded.values())))\n"
-                "        extract_zip_safely(zip_path, byod_root, size_limit_bytes=2 * 1024**3)\n"
+                "    if BYOD_PATH.strip():\n"
+                "        byod_source = Path(BYOD_PATH.strip()).expanduser()\n"
+                "        if byod_source.is_dir():\n"
+                "            for name in BYOD_FILES:\n"
+                "                if (byod_source / name).is_file():\n"
+                "                    shutil.copyfile(byod_source / name, byod_root / name)\n"
+                "        elif byod_source.is_file() and byod_source.suffix.lower() == '.zip':\n"
+                "            extract_zip_safely(byod_source, byod_root, size_limit_bytes=2 * 1024**3)\n"
+                "        else:\n"
+                "            raise FileNotFoundError(f'BYOD_PATH {{str(byod_source)!r}} is neither a folder nor a .zip file: give a folder holding train.jsonl (plus optional validation.jsonl/val.jsonl and test.jsonl) or one ZIP of them')\n"
                 "    else:\n"
-                "        for name, payload in uploaded.items():\n"
-                "            (byod_root / Path(name).name).write_bytes(payload)\n\n"
+                "        try:\n"
+                "            from google.colab import files\n"
+                "        except ImportError:\n"
+                "            raise RuntimeError('USE_BYOD = True but BYOD_PATH is empty and this runtime has no Colab upload dialog: set BYOD_PATH to a folder or ZIP holding train.jsonl') from None\n"
+                "        uploaded = files.upload() or {{}}\n"
+                "        if not uploaded:\n"
+                "            raise RuntimeError('The upload was cancelled or empty: run this cell again and choose train.jsonl (plus optional validation/test files) or one ZIP, or set BYOD_PATH')\n"
+                "        if len(uploaded) == 1 and next(iter(uploaded)).lower().endswith('.zip'):\n"
+                "            zip_path = WORK_DIR / 'data.zip'\n"
+                "            zip_path.write_bytes(next(iter(uploaded.values())))\n"
+                "            extract_zip_safely(zip_path, byod_root, size_limit_bytes=2 * 1024**3)\n"
+                "        else:\n"
+                "            for name, payload in uploaded.items():\n"
+                "                (byod_root / Path(name).name).write_bytes(payload)\n\n"
                 "    def read_jsonl(path):\n"
-                "        return [canonical(json.loads(line)) for line in path.read_text(encoding='utf-8').splitlines() if line.strip()]\n\n"
+                "        records = []\n"
+                "        for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), start=1):\n"
+                "            if not line.strip():\n"
+                "                continue\n"
+                "            try:\n"
+                "                records.append(canonical(json.loads(line)))\n"
+                "            except (ValueError, KeyError, TypeError) as exc:\n"
+                "                raise ValueError(f'{{path.name}} line {{number}}: not a messages, prompt/completion or instruction/input/output record ({{type(exc).__name__}}: {{exc}})') from None\n"
+                "        return records\n\n"
                 "    if not (byod_root / 'train.jsonl').exists():\n"
-                "        raise ValueError('BYOD requires train.jsonl')\n"
+                "        raise ValueError(f'BYOD requires train.jsonl at the top level of the folder or ZIP; found: {{sorted(p.name for p in byod_root.iterdir()) or \"nothing\"}}')\n"
                 "    if (byod_root / 'validation.jsonl').exists() and (byod_root / 'val.jsonl').exists():\n"
                 "        raise ValueError('Provide either validation.jsonl or val.jsonl, not both')\n"
                 "    SPLITS = {{'train': read_jsonl(byod_root / 'train.jsonl')}}\n"
@@ -210,7 +268,17 @@ TEMPLATE = {
                 "exactly where the generation prompt ends — the same prompt the model sees at inference — and runs through the "
                 "end-of-turn marker, so the model learns to stop. Over-length rows are rejected, never truncated. The last "
                 "print decodes the first training example and wraps every supervised run in `⟦ ⟧`: the answer text and its "
-                "end-of-turn marker are inside, the user turn and role markers are not."
+                "end-of-turn marker are inside, the user turn and role markers are not.\n\n"
+                "**Predict:** will the leaked probe be accepted? And in the decoded first example, which parts will sit inside `⟦ ⟧`?\n\n"
+                "**What to notice:** `findings` (one rejection, with the pipeline's own message), the supervised-token counts "
+                "against the total token counts per split, and the `⟦ ⟧` spans.\n\n"
+                "<details><summary>Check your reasoning</summary>\n\n"
+                "The probe is rejected: one validation row is identical to a training row, and leakage is fatal in "
+                "`validate_inputs`, so its message is recorded under `findings` while the real splits are accepted. Inside "
+                "`⟦ ⟧` you should see only the assistant's answer and its end-of-turn marker; the system and user turns and "
+                "the role markers are outside, which is why the supervised-token count of each split is well below its total "
+                "token count.\n\n"
+                "</details>"
             ),
             "code": (
                 "os.makedirs('outputs', exist_ok=True)\n"
@@ -244,9 +312,31 @@ TEMPLATE = {
                 "and non-thinking mode, so the comparison after training is deterministic given the same weights, device and "
                 "library versions. `generate` puts the model in eval mode (no dropout), turns the KV cache on, and restores "
                 "whatever state it found, so the same helper is safe to call in the middle of training later. Look for two "
-                "short answers; on the unadapted base model expect English or mixed-language replies to the Filipino prompts."
+                "short answers; on the unadapted base model expect English or mixed-language replies to the Filipino prompts.\n\n"
+                "Sections 7 and 10 attach LoRA layers to the loaded model in place. If you re-run this section after them, the "
+                "cell first reloads the frozen base from the verified snapshot (`pipe.reload_base`, no network) and says so, "
+                "so the baseline is always the unadapted model.\n\n"
+                "**Predict:** in which language will the base model answer the two Filipino prompts?\n\n"
+                "<details><summary>Check your reasoning</summary>\n\n"
+                "Usually English or a mix: SmolLM2 is instruction-tuned mostly on English data. Write down what it actually "
+                "said — Section 7 asks the same prompts again, with greedy decoding, so any difference comes from the adapter.\n\n"
+                "</details>"
             ),
             "code": (
+                "import gc\n\n\n"
+                "def frozen_base():\n"
+                "    \"\"\"The canonical model must be the frozen base: Sections 7 and 10 attach LoRA layers to pipe.model in place,\n"
+                "    so a re-run of this section or of Section 7 first reloads the base from the verified snapshot (no network).\"\"\"\n"
+                "    global model, reloaded\n"
+                "    if any('lora_' in name.lower() for name, _ in pipe.model.named_modules()):\n"
+                "        model = reloaded = None\n"
+                "        pipe.model = None\n"
+                "        gc.collect()\n"
+                "        torch.cuda.empty_cache()\n"
+                "        pipe.model = pipe.reload_base()\n"
+                "        print('Reloaded the frozen base model from the verified snapshot: the loaded model carried LoRA adapters from an earlier run.')\n"
+                "    return pipe.model\n\n\n"
+                "frozen_base()\n"
                 "PROMPTS = [\n"
                 "    'Ipaliwanag sa simpleng Filipino kung ano ang machine learning.',\n"
                 "    'Magbigay ng tatlong paraan para mabawasan ang basura sa opisina.',\n"
@@ -277,13 +367,27 @@ TEMPLATE = {
                 "control the shuffle; bitwise determinism across GPU kernels is not promised. Afterwards the two probe "
                 "prompts are asked again for the before/after table. A measured Qwen3-0.6B reference run with these settings "
                 "on a Colab T4 gave train loss ≈ 3.22, validation loss ≈ 3.19, perplexity ≈ 24, 53 s, 1.52 GiB peak; treat "
-                "those as historical comparison data, not expected SmolLM2-360M results."
+                "those as historical comparison data, not expected SmolLM2-360M results. Re-running this cell trains a new "
+                "adapter on the frozen base (the cell reloads the base first if it already carries LoRA layers); it never "
+                "trains on top of the previous adapter.\n\n"
+                "**Predict:** what percentage of the parameters will be trainable? After one epoch, will validation loss be "
+                "above or below training loss?\n\n"
+                "**What to notice:** `trainable_percent`, the two loss values, and whether the adapted answers changed "
+                "language or register compared with the baseline.\n\n"
+                "<details><summary>Check your reasoning</summary>\n\n"
+                "Well under 1 %: rank-8 matrices on seven projection types are tiny next to 360 million frozen weights. "
+                "Validation loss at or slightly below training loss after one epoch is normal here — dropout is active while "
+                "training, and the validation split is manufactured from the same source (Section 8 explains why that makes "
+                "it optimisation evidence only). The exact loss values depend on your GPU and run; no recorded SmolLM2 run "
+                "exists yet to compare against.\n\n"
+                "</details>"
             ),
             "code": (
                 "import gc\n"
                 "import random\n"
                 "import time\n\n"
                 "from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training\n\n"
+                "frozen_base()  # a re-run trains a fresh adapter on the frozen base, never on top of the previous one\n"
                 "CANDIDATE_TARGETS = {{'q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj'}}\n"
                 "LORA_TARGETS = sorted({{name.rsplit('.', 1)[-1] for name, _ in pipe.model.named_modules()}} & CANDIDATE_TARGETS)\n"
                 "if not LORA_TARGETS:\n"
@@ -352,7 +456,14 @@ TEMPLATE = {
                 "`outputs/{stem}_evaluation_report.json`. Validation loss slightly below training loss after one epoch is "
                 "normal here (dropout is active during training and the splits share a distribution); with `EPOCHS = 3` the "
                 "validation loss usually keeps falling through epoch 2 and turns up around epoch 3–4 — that upturn is "
-                "overfitting, and the lowest-validation-loss epoch is the one to keep."
+                "overfitting, and the lowest-validation-loss epoch is the one to keep.\n\n"
+                "**Predict:** which verdict will the report give with the default sample?\n\n"
+                "<details><summary>Check your reasoning</summary>\n\n"
+                "`sample-sanity`: a validation split was scored, but it is one seeded run on a split manufactured from the "
+                "training source, with no dispersion estimate. The report's `needs` field names what task quality would "
+                "require — a held-out set from your real task, a rubric and ideally human ratings. `not-measurable` appears "
+                "only when no validation split was scored.\n\n"
+                "</details>"
             ),
             "code": (
                 "report = evaluation_report(METRICS, sample_kind=sample_kind, n_train=len(SPLITS['train']), n_validation=len(SPLITS['validation']), probes=probes)\n"
@@ -373,7 +484,15 @@ TEMPLATE = {
                 "and on (`model.disable_adapter()`) — the cleanest way to see what the adapter alone contributes. Watch for "
                 "language and register (did it stay in Filipino?), whether it stops cleanly, and repetition loops, the "
                 "classic sign of a small model pushed too hard by greedy decoding. Real products should sample "
-                "(`do_sample=True, temperature=0.7, top_p=0.8, top_k=20`); greedy is for reproducible checks."
+                "(`do_sample=True, temperature=0.7, top_p=0.8, top_k=20`); greedy is for reproducible checks.\n\n"
+                "**Predict:** for a prompt the adapter never saw, will the adapted answer stay in Filipino more often than the base answer?\n\n"
+                "**What to notice:** compare each BASE/ADAPTED pair on language, length and whether it stops cleanly; a "
+                "repeated phrase is a greedy-decoding loop, not a training bug.\n\n"
+                "<details><summary>Check your reasoning</summary>\n\n"
+                "Often, but not always: about a hundred training rows shift the *style* of answers, so expect some prompts to "
+                "change register or language and others to look much like the base. Neither column is scored; this is "
+                "qualitative evidence.\n\n"
+                "</details>"
             ),
             "code": (
                 "RUN_NEW_PROMPT_INFERENCE = True  # @param {{type:\"boolean\"}}\n"
@@ -415,7 +534,15 @@ TEMPLATE = {
                 "something. Finally the machine-readable result JSON (metrics, report, input manifest, sample identity and "
                 "digest, hyperparameters, the notebook's source, the model identity, licence and runtime) and the "
                 "before/after probe table (CSV, one row per prompt) are written, and the bundle is zipped for the companion "
-                "artifact-inference notebook. The companion refuses any bundle whose files do not match the manifest."
+                "artifact-inference notebook. The companion refuses any bundle whose files do not match the manifest. On Colab "
+                "the ZIP is offered as a download; elsewhere the cell prints where to find it.\n\n"
+                "**Predict:** which files will the bundle list, and will any training row be inside it?\n\n"
+                "<details><summary>Check your reasoning</summary>\n\n"
+                "The adapter weights and config, the tokenizer, `metrics.json`, `provenance.json` and the "
+                "`artifact-manifest.json` that lists every file with its size and SHA-256 — and no training rows. The cell "
+                "prints `PASS: fresh base + adapter reload …` only if the reloaded `B` matrices are non-zero and the "
+                "adapter-on and adapter-off openings differ.\n\n"
+                "</details>"
             ),
             "code": (
                 "import csv\n"
@@ -486,8 +613,11 @@ TEMPLATE = {
                 "        writer.writerow(['new-prompt', row['prompt'], row['base'], row['adapted']])\n"
                 "print(f\"Artifact: {{ARTIFACT_ZIP}} ({{ARTIFACT_ZIP.stat().st_size / 1024**2:.1f}} MB) SHA-256 {{payload['artifact']['zip_sha256']}}\")\n"
                 "print(sorted(os.listdir('outputs')))\n"
-                "from google.colab import files\n"
-                "files.download(str(ARTIFACT_ZIP))"
+                "try:\n"
+                "    from google.colab import files\n"
+                "    files.download(str(ARTIFACT_ZIP))\n"
+                "except (ImportError, AttributeError):\n"
+                "    print(f'No download dialog in this runtime: the bundle ZIP is at {{ARTIFACT_ZIP.resolve()}}')"
             ),
         },
     ],
@@ -508,11 +638,43 @@ TEMPLATE = {
         "adapter off and on, export a manifested adapter bundle, and reconstruct it from disk against the verified base — "
         "without the repository being reachable. It does **not** establish benchmark superiority, task quality on your "
         "domain, safety, fairness, or production fitness.\n\n"
-        "**Next experiments:** set `EPOCHS = 3` and watch the validation loss turn up (overfitting; keep the lowest epoch); "
+        "## Troubleshooting\n\n"
+        "Section 1 stops with `This notebook needs a Linux x86_64 runtime`: use Google Colab, Kaggle or a Linux Jupyter host. "
+        "`The pinned uv wheel failed its size/SHA-256 check`: run Section 1 again; if it repeats, the download is being "
+        "altered. `The isolated environment's Python process exited`: the worker crashed, usually out of GPU or host memory — "
+        "restart the session and choose **Run all**. `No GPU visible` in Section 4: select a T4 GPU runtime and run all again. "
+        "`CUDA out of memory` in Section 7: lower `MAX_SEQUENCE_LENGTH` or `SAMPLE_LIMIT`. A leakage `ValueError` from "
+        "`validate_inputs` on your own data: the same record appears in two files — remove the duplicate. `BYOD requires "
+        "train.jsonl`, `… line N: not a messages … record`, `BYOD_PATH … is neither a folder nor a .zip file` or `The upload "
+        "was cancelled or empty`: fix the named file or path and re-run from Section 4. `Reloaded adapter has no effect` in "
+        "Section 10: the adapter learned almost nothing — check `LEARNING_RATE` and `EPOCHS`. `No download dialog in this "
+        "runtime`: fetch the ZIP from the printed path.\n\n"
+        "## Change one thing (next experiments)\n\n"
+        "Set `EPOCHS = 3` and watch the validation loss turn up (overfitting; keep the lowest epoch); "
         "raise `LORA_RANK` to 16 with `LORA_ALPHA` 32 and compare loss and answers; switch to `Sample: Dolly` and see the "
         "`set aside` count grow with a 512-token window; enable `USE_BYOD` with a few hundred rows from your own task and "
         "score the adapter against your own held-out set; feed `outputs/{stem}_adapter_bundle.zip` to the companion "
-        "artifact-inference notebook in a separate session.\n\n"
+        "artifact-inference notebook in a separate session. Re-run from Section 6 after any change: the cells restart from the "
+        "frozen base.\n\n"
+        "## Glossary\n\n"
+        "- **Token:** the unit the model reads and writes — a word piece; sequence lengths and ceilings are counted in tokens.\n"
+        "- **Chat template:** the base tokenizer's rule for turning a list of `{{role, content}}` turns into one token sequence with role markers.\n"
+        "- **SFT (supervised fine-tuning):** training on example conversations so the model imitates the assistant turns.\n"
+        "- **Assistant-only loss masking:** every token outside an assistant turn gets label `-100` (`IGNORE_INDEX`), so only the answers are learned.\n"
+        "- **LoRA:** a trainable low-rank correction `B A` added to a frozen weight matrix; `B` starts at zero, so training starts from the base model.\n"
+        "- **QLoRA / `nf4`:** LoRA on a base model stored in 4-bit NormalFloat, dequantized on the fly; it is what makes a T4 enough.\n"
+        "- **Adapter bundle:** the LoRA weights plus tokenizer, metrics, provenance and a SHA-256 manifest; useless without the exact base model it was trained on.\n"
+        "- **Validation loss / perplexity:** average per-token loss on held-out rows, and its exponential; optimisation evidence, not answer correctness.\n"
+        "- **Manufactured validation split:** rows held out from the training source itself, so it measures fit to that source, not to your task.\n"
+        "- **Gradient accumulation:** summing gradients over several examples before one optimizer step (`GRAD_ACCUM = 2`).\n"
+        "- **Greedy decoding:** always taking the most likely next token; reproducible, but small models can loop.\n"
+        "- **Isolated environment:** the separate hash-locked Python environment built in Section 1; every later cell runs there.\n\n"
+        "## Conclusion (your notes)\n\n"
+        "1. In two sentences: what did the adapter change about the model's answers, and what evidence do you have for it?\n"
+        "2. Why is the validation loss in the evaluation report not a measure of answer quality?\n"
+        "3. Which of your predictions were wrong, and what did the output show instead?\n"
+        "4. What would you need before deploying an adapter trained this way on your own task?\n\n"
+        "**Your notes:**\n\n"
         "## References\n\n"
         f"- Repository README: https://github.com/kurtvalcorza/{REPO}/blob/main/README.md\n"
         f"- Repository model card: https://github.com/kurtvalcorza/{REPO}/blob/main/weights/smollm2-360m/MODEL_CARD.md\n"

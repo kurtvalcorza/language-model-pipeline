@@ -54,7 +54,7 @@ capability without requiring DIMER Workbench.
 
 [![Open Artifact Inference In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb)
 
-Both notebooks are declared under DIMER Notebook Specification 1.1 and are **standalone** (§3.6):
+Both notebooks are declared under DIMER Notebook Specification 2.2 and are **standalone** (§4):
 `tools/build_notebook.py` generates them from `tools/notebook_template.py` /
 `tools/notebook_template_artifact_inference.py`, and each carries `src/lmpipeline/pipeline.py`
 verbatim, the pinned base identity (`HuggingFaceTB/SmolLM2-360M-Instruct` at revision

@@ -4,7 +4,7 @@
 (`ARTIFACT-INFERENCE`) are **release candidates** until the exact notebook revisions have executed
 top-to-bottom in a clean supported runtime. Unit tests, JSON validation, code-cell compilation, and
 `tools/validate_release_assets.py` are necessary checks but are **not** runtime evidence under DIMER
-Notebook Specification 1.1. This file is the durable release-gate record for both notebooks.
+Notebook Specification 2.2. This file is the durable release-gate record for both notebooks.
 
 ## Automatic coverage (static, every pull request)
 
@@ -14,7 +14,7 @@ CI runs `tools/validate_release_assets.py`, which checks:
   or execution counts; no unresolved placeholder markers; every code cell is preceded by an explanatory
   markdown cell;
 - exactly the two tutorial notebooks, named in `tutorials/README.md` with their profiles, the notebook-spec
-  version and the standalone carrier; `metadata.dimer` declares the profile, spec `1.1`, `standalone: true`
+  version and the standalone carrier; `metadata.dimer` declares the profile, spec `2.2`, `standalone: true`
   and `generated_from` (repository, generating commit, module SHA-256, generator);
 - the standalone carrier (ST1–ST6, PAR1–PAR3) for each notebook: no clone, repository install or repository
   import on the primary path; exactly one cell tagged `embedded_module` equal to `src/lmpipeline/pipeline.py`
@@ -31,10 +31,12 @@ CI runs `tools/validate_release_assets.py`, which checks:
 - the profile-specific public-API calls (`stage_missing_files`, `verify_snapshot`,
   `LanguageModelPipeline.from_pretrained(weights_dir=...)`, `validate_inputs`, `prepare_splits`, `generate`,
   `evaluate_loss`, `evaluation_report`, `export_adapter_bundle`, `reload_base`, `load_adapter`,
-  `validate_prompts`, `verify_artifact_bundle`, `extract_zip_safely`), the ceiling prints, the exports, the
+  `validate_prompts`, `verify_artifact_bundle`, `extract_zip_safely`, the base-model validation loss before
+  adaptation, the reload reproduction check, the adapter-activity readout, the seeded sampling), the ceiling prints, the exports, the
   learner-facing statements (what is trained and what is not, assistant-only masking, manufactured validation
   split, optimisation metrics versus task quality, adapters incomplete without their base, trust boundary,
-  no network fallback) and the gated-off BYOD default; forbidden patterns (credential-in-URL, any
+  no network fallback) and the gated-off defaults (`USE_BYOD`, `USE_OWN_ARTIFACT` and the optional exercises are
+  `False` on a form line); forbidden patterns (credential-in-URL, any
   `git clone` / `github.com/kurtvalcorza` / repository import on the primary path, a mutable `revision='main'`
   or unpinned `git+https` dependency, `trust_remote_code=True`, `pickle.load`, `torch.load(`, `extractall(`,
   and — outside the carried module cell — `from transformers import`, `AutoModelForCausalLM`,
@@ -68,12 +70,14 @@ Before changing the registry status from `Candidate` to `Release-grade`:
 3. run it top-to-bottom without editing implementation cells (form parameters at their defaults for the
    sample path: `USE_BYOD = False`, `DATA_SOURCE = "Sample: Filipino SFT"`, `SAMPLE_LIMIT = 120`,
    `MAX_SEQUENCE_LENGTH = 512`, `EPOCHS = 1`, `RUN_NEW_PROMPT_INFERENCE = True`);
-4. verify that Section 1 reports `NOTEBOOK_SOURCE.repository_revision` equal to the commit recorded in
-   `metadata.dimer.generated_from` and that the installed core package versions equal the inline `PINS`
-   (= `pyproject.toml`) — `bitsandbytes==0.49.0`, `peft==0.18.0`, `transformers==4.57.1` and `torch==2.14.0`
-   on the CUDA runtime are the pins most likely to need a wheel-availability check;
+4. verify that Section 1 builds (or reuses) the isolated environment from `tutorials/requirements-isolated.lock.txt`
+   with **no restart** and no install into the kernel, that the runtime cell reports
+   `NOTEBOOK_SOURCE.repository_revision` equal to the commit recorded in `metadata.dimer.generated_from`, and that
+   the versions it prints equal the inline `PINS` (= `pyproject.toml`) — `bitsandbytes==0.49.0`, `peft==0.18.0`,
+   `transformers==4.57.1` and `torch==2.14.0` on the CUDA runtime are the pins most likely to need a
+   wheel-availability check;
 5. verify every default-path stage completes:
-   - pinned runtime installed from the inline `PINS` with no GitHub access and no token;
+   - isolated environment built from the hash-locked pins with no GitHub access and no token;
    - the carried module cell executes (defines `LanguageModelPipeline` and the helpers) with no import of
      `lmpipeline`;
    - the inline `MANIFEST` is asserted against the module identity and written to `weights/smollm2-360m/`;
@@ -85,24 +89,34 @@ Before changing the registry status from `Candidate` to `Release-grade`:
    - `validate_inputs` writes `outputs/language_model_finetuning_input_manifest.json` (verdict `accepted`,
      one recorded rejection finding from the leaked-split probe); `prepare_splits` prints supervised-token
      counts and the bracketed first example;
-   - two greedy baseline answers; LoRA attached with under 1 % trainable parameters; one epoch with train
-     and validation loss printed; adapted answers and `METRICS` (`trainLoss`, `validationLoss`,
-     `validationPerplexity`, `wallSeconds`, `peakGpuMemoryBytes`);
+   - two greedy baseline answers and the base model's validation loss (`base_validation_loss`); LoRA attached
+     with about 1.2 % trainable parameters; one epoch with train and validation loss printed and the
+     `validation loss base → adapted` line; adapted answers and `METRICS` (`baseValidationLoss`, `trainLoss`,
+     `validationLoss`, `validationPerplexity`, `epochs`, `wallSeconds`, `peakGpuMemoryBytes`);
    - `evaluation_report` writes `outputs/language_model_finetuning_evaluation_report.json` with verdict
-     `sample-sanity`, stated as optimisation evidence only;
+     `sample-sanity` and a `baselines` entry for `baseValidationLoss`, stated as optimisation evidence only;
    - new-prompt answers with the adapter off and on; `export_adapter_bundle` writes the bundle and its
-     `artifact-manifest.json`; the fresh reload passes all three checks; `outputs/language_model_finetuning_result.json`,
+     `artifact-manifest.json`; the fresh reload (into a separate object; the trained model stays in memory) passes
+     the three hard checks and prints the reproduction line — reloaded validation loss, its absolute difference
+     from the in-memory loss against the 0.05-nat tolerance, and whether the 16-token greedy openings are identical
+     (record both numbers and the verdict; `NOT reproduced` is a finding, not a pass); `outputs/language_model_finetuning_result.json`,
      `outputs/language_model_finetuning_probes.csv` and `outputs/language_model_finetuning_adapter_bundle.zip`
      written with `NOTEBOOK_SOURCE`, model revision, model licence, runtime versions and device;
-6. open the exact companion notebook revision in a **separate** clean runtime, supply the bundle produced
-   in step 5 (upload, or `ARTIFACT_DIR` for the Kaggle executor), leave the prompts at their defaults, and
-   verify: bundle verified before load; adapter attached with non-zero `B` matrices; `validate_prompts`
-   writes the input manifest with the blank-prompt finding; greedy adapter-off/on answers differ; two
-   sampled answers; `evaluation_report` verdict `not-measurable`; result JSON and generations CSV written;
+6. open the exact companion notebook revision in a **separate** clean runtime. Default path: leave every field
+   alone; Section 4 reads the trusted sample bundle pinned in `SAMPLE_ARTIFACT` (until that slot is filled,
+   Run all stops there with the message naming it — record that as the outcome). Own-bundle path: set
+   `USE_OWN_ARTIFACT = True` and `ARTIFACT_ZIP_PATH` to the ZIP from step 5 (Kaggle executor), or use the
+   upload dialog (Colab), with `EXPECTED_ARTIFACT_ZIP_SHA256` set to the step-5 digest. Verify: whole-ZIP digest
+   checked before extraction, bundle verified before load; adapter attached with the printed `lora_b_max_abs`;
+   `validate_prompts` writes the input manifest with the blank-prompt finding; the adapter-activity readout
+   (`next_token_logit_max_abs_delta`, `answers_differ`, verdict `active`); two seeded sampled answers;
+   `evaluation_report` verdict `not-measurable` with `sample_kind: sample`; result JSON and generations CSV written;
 7. verify the exports exist and the interpretation sections match the observed path;
 8. record the notebook Git blob ids, commit, runtime (platform, Python, PyTorch, transformers, peft, GPU),
-   model identifier and immutable revision, whether the model cache was clean, outcome, produced outputs,
-   and any warning or applicable `SHOULD` deviation in the table below;
+   model identifier and immutable revision, whether the model cache was clean, **whether a kernel restart or a
+   `google.colab` shim was needed** (either one disqualifies the run as Run-all evidence), the sample-artifact
+   SHA-256 for the companion, outcome, produced outputs, and any warning or applicable `SHOULD` deviation in
+   the table below;
 9. record no access tokens or other secrets.
 
 A known-failing default path in the supported runtime blocks release.
@@ -118,12 +132,18 @@ runtime, not general estimates.
 
 | Date (UTC) | Commit / notebook blob | Executor | Path exercised | Wall | Outcome |
 |---|---|---|---|---|---|
-| 2026-09-14 | `e9d7e6b` / `469911578d05` | Kaggle T4 (`kurtvalcorza/dimer-nb2-language-model-finetuning` v2) | E2E default sample path (`language_model_finetuning_colab.ipynb`) | 360.9 s | **PASSED** — 10/10 ok code cells executed cleanly, 28 files, 727 MB staged |
-| | | | Companion path fed by the E2E bundle (`language_model_artifact_inference_colab.ipynb`) | | pending — queued to the GPU lane |
+| 2026-09-14 | `e9d7e6b` / `469911578d05` | Kaggle T4 (`kurtvalcorza/dimer-nb2-language-model-finetuning` v2) | E2E default sample path (`language_model_finetuning_colab.ipynb`), an earlier revision that still installed into the kernel | 360.9 s | **PASSED only after one kernel restart** — pass 1 stopped at the install cell (`Core dependencies changed while older modules were loaded: cuda-bindings` → restart instruction); pass 2, after the executor restarted the kernel, ran 10/10 code cells with a leading `google.colab` shim cell. 28 files, 727 MB staged; train loss 3.266, validation loss 3.261, perplexity 26.1, 1.186 % trainable, `bfloat16` compute on the T4, 55.5 s loop, 0.66 GiB peak. The in-memory and reloaded 16-token openings differed and the cell still printed PASS (now reported explicitly by the reload check). **Not Run-all evidence** (RUN10/ENV6), and not evidence for the current isolated-runtime blob |
+| | | | Companion path (`language_model_artifact_inference_colab.ipynb`) | | no run recorded at any revision |
 
 ## Current status
 
-No clean-runtime execution of either standalone notebook has been recorded yet; clean GPU execution evidence for the E2E path is now recorded below. Static validation (`tools/validate_release_assets.py`), nbformat validation, a
+No clean-runtime one-pass execution of either standalone notebook has been recorded at its current blob. The only
+recorded run is the 2026-09-14 Kaggle T4 run of an earlier E2E blob (table above), which needed a kernel restart
+and a `google.colab` shim and therefore does not satisfy RUN10/ENV6; the companion has never been run. The
+current revisions replace the in-kernel install with the isolated environment, add the base validation loss, the
+reload reproduction check and the companion's sample-artifact slot (`SAMPLE_ARTIFACT`, still empty: it must be
+filled from a recorded hosted run of the E2E notebook before the companion's default path can complete). Static
+validation (`tools/validate_release_assets.py`), nbformat validation, a
 `compile()` sweep over every code cell, and the offline unit suite passed on the tutorial source at the
 candidate revision, which is necessary but not sufficient. The registry status remains **Candidate** until a
 reviewer confirms recorded runs against the notebook blobs under review and an integrator promotes them;
@@ -137,4 +157,5 @@ carrier itself — executing the carried module cell in a runtime that has no re
 validated statically only (parity PASS) and through a carrier probe that executes the install, module and
 manifest cells with the repository package blocked, never end-to-end. The clean run will be the first
 execution of the standalone path, of the staging path, of the SmolLM2-360M pin under this module, and of the
-`torch==2.14.0` / `bitsandbytes==0.49.0` pin set on a T4.
+`torch==2.14.0` / `bitsandbytes==0.49.0` pin set on a T4 inside the isolated environment. `tutorials/RELEASE_VERIFICATION.md`
+mirrors this status (no passing clean-run record for either current blob) and holds the per-run record format.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a STANDALONE DIMER tutorial notebook (NOTEBOOK_SPEC 2.0 §4) from repository sources — /2.2.
+"""Generate a STANDALONE DIMER tutorial notebook (NOTEBOOK_SPEC 2.2 §4) from repository sources — /2.2.
 
 /2 adds to /1: multi-module packages (one tagged cell per module, topologically ordered, package-relative
 imports removed), template-declared rewrite rules, and extra pinned snapshots (`extra_weights`) for packages
@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 GENERATOR_VERSION = "build_notebook.py/2.2"
-NOTEBOOK_SPEC = "2.0"
+NOTEBOOK_SPEC = "2.2"
 
 # ST2: default rewrite rule; a template may replace it with its own `rewrites` list. Every rule must
 # match exactly once across the embedded modules, so a silent no-op is impossible.
@@ -464,6 +464,7 @@ def template_contract() -> dict[str, str]:
         "lock": "OPTIONAL (required with isolated_runtime): repository-relative hash-locked requirements compiled from the pins",
         "infrastructure_labels": "OPTIONAL bool (default False): label the setup, carrier and snapshot sections Infrastructure and collapse their cells (NOTEBOOK_SPEC 2.2 GDL11)",
         "guided": "OPTIONAL {'opening': [markdown cells inserted after the header]} (NOTEBOOK_SPEC 2.2 GDL1-GDL4)",
+        "carrier_note": "OPTIONAL markdown appended to the Section 2 intro: which carried functions this notebook actually exercises, so a learner knows what to read and what to skip (NOTEBOOK_SPEC 2.2 GDL11)",
     }
 
 
@@ -780,7 +781,7 @@ def _md(source: str) -> dict[str, Any]:
 def _code(source: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"cell_type": "code", "execution_count": None, "id": "", "metadata": metadata or {}, "outputs": [], "source": source.rstrip("\n")}
 
-# NOTEBOOK_SPEC 2.0 §3.4/§28 declarations. A template MAY override `mode`, `run_all` and `byod`;
+# NOTEBOOK_SPEC 2.2 §3.4/§28 declarations. A template MAY override `mode`, `run_all` and `byod`;
 # E2E and ARTIFACT-INFERENCE templates MUST state `run_all` themselves (their default paths differ).
 MODES = ("REFERENCE", "GUIDED", "WORKSHOP")
 _RUN_ALL_DEFAULT = {
@@ -789,14 +790,14 @@ _RUN_ALL_DEFAULT = {
         "pinned snapshot, obtains the tutorial sample automatically, validates it into an input manifest before the model "
         "runs, runs the task locally in this kernel, writes the evaluation report, and exports machine-readable outputs "
         "with provenance. The default path needs no repository clone, no DIMER worker or service, no credential, no upload "
-        "dialog and no configuration edit (NOTEBOOK_SPEC 2.0 §5)."
+        "dialog and no configuration edit (NOTEBOOK_SPEC 2.2 §5)."
     ),
     "MULTI-CAPABILITY": (
         "Selecting **Run all** in a fresh supported runtime installs the pinned dependencies, stages and digest-verifies the "
         "pinned snapshot, obtains the tutorial sample automatically, validates it into an input manifest before the model "
         "runs, runs every demonstrated capability locally in this kernel with its own input/output contract, writes the "
         "evaluation report, and exports machine-readable outputs with provenance. The default path needs no repository "
-        "clone, no DIMER worker or service, no credential, no upload dialog and no configuration edit (NOTEBOOK_SPEC 2.0 §5)."
+        "clone, no DIMER worker or service, no credential, no upload dialog and no configuration edit (NOTEBOOK_SPEC 2.2 §5)."
     ),
 }
 _BYOD_DEFAULT = (
@@ -986,7 +987,8 @@ def render(repo: Path, template: dict[str, Any], revision: str | None = None) ->
                 "these cells and the modules diverge, so what you run here is what the repository tests. Nothing in these cells runs a model yet."
             )
             label = "\n\n" + infra.rstrip("\n") if infra else ""
-            add(_md(title + label + intro + f"\n\n**Module {i + 1}/{n_mod}:** `{rel}`"))
+            note = "\n\n" + template["carrier_note"].strip().format(**fmt) if template.get("carrier_note") else ""
+            add(_md(title + label + intro + note + f"\n\n**Module {i + 1}/{n_mod}:** `{rel}`"))
         else:
             add(_md(f"**Module {i + 1}/{n_mod}:** `{rel}` (carried verbatim; see the note above)"))
         add(_code(ctx["embedded"][m], {**collapsed, "dimer": {"embedded_module": rel, "module_sha256": ctx["per_module_sha256"][rel]}}))

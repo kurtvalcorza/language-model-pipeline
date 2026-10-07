@@ -1,6 +1,6 @@
 """Static release-asset validation for the language-model (QLoRA adapter) DIMER pipeline.
 
-Checks the two STANDALONE tutorial notebooks (DIMER Notebook Specification 2.0 §4) — the `E2E`
+Checks the two STANDALONE tutorial notebooks (DIMER Notebook Specification 2.2 §4) — the `E2E`
 fine-tuning tutorial and its `ARTIFACT-INFERENCE` companion — the tutorial registry, the snapshot model
 card, README, STATUS.md and weight documentation for source conformance and cross-document identity
 consistency, and runs the generator parity checks (PAR1–PAR3) for every notebook.
@@ -86,7 +86,7 @@ NOTEBOOKS = {
     "language_model_finetuning_colab.ipynb": {
         "template": "notebook_template",
         "profile": "E2E",
-        "byod_gates": ("USE_BYOD",),
+        "byod_gates": ("USE_BYOD", "RUN_DECODING_EXPERIMENT"),
         "expected_outputs": (
             "outputs/language_model_finetuning_input_manifest.json",
             "outputs/language_model_finetuning_evaluation_report.json",
@@ -111,9 +111,11 @@ NOTEBOOKS = {
             "new_prompt_manifest = validate_prompts(NEW_PROMPTS, 96, token_length=pipe.prompt_token_length)",
             "with model.disable_adapter():",
             "bundle_manifest = pipe.export_adapter_bundle(model, ADAPTER_DIR, metrics=METRICS, provenance=PROVENANCE)",
-            "pipe.model = pipe.reload_base()",
-            "reloaded = pipe.load_adapter(ADAPTER_DIR)",
+            "BASE_VALIDATION_LOSS = pipe.evaluate_loss(MASKED['validation'])",
+            "'baseValidationLoss': BASE_VALIDATION_LOSS",
+            "reloaded = pipe.load_adapter(ADAPTER_DIR, base_model=pipe.reload_base())",
             "if reloaded_opening == adapter_off_opening:",
+            "reloaded_validation_loss = pipe.evaluate_loss(MASKED['validation'], model=reloaded)",
             "'datasetDigest': DATASET_DIGEST",
             "'model_revision': MODEL_REVISION",
             "'model_license': MODEL_LICENSE",
@@ -143,7 +145,7 @@ NOTEBOOKS = {
     "language_model_artifact_inference_colab.ipynb": {
         "template": "notebook_template_artifact_inference",
         "profile": "ARTIFACT-INFERENCE",
-        "byod_gates": (),
+        "byod_gates": ("USE_OWN_ARTIFACT", "RUN_TAMPER_EXERCISE"),
         "expected_outputs": (
             "outputs/language_model_artifact_inference_input_manifest.json",
             "outputs/language_model_artifact_inference_evaluation_report.json",
@@ -151,8 +153,11 @@ NOTEBOOKS = {
             "outputs/language_model_artifact_inference_generations.csv",
         ),
         "code_markers": (
+            "USE_OWN_ARTIFACT = False",
+            "ARTIFACT_ZIP_PATH = ''",
             "ARTIFACT_DIR = ''",
             "EXPECTED_ARTIFACT_ZIP_SHA256 = ''",
+            "SAMPLE_ARTIFACT = {",
             "raise ValueError('Whole-ZIP SHA-256 mismatch: this is not the archive you were told to expect')",
             "extraction_root = extract_zip_safely(archive_path, Path('work') / 'external-artifact', size_limit_bytes=512 * 1024**2)",
             "artifact_manifest, provenance = verify_artifact_bundle(bundle_dir)",
@@ -163,7 +168,9 @@ NOTEBOOKS = {
             "validate_prompts(['   '], MAX_NEW_TOKENS)",
             "with model.disable_adapter():",
             "SAMPLING = {'do_sample': True, 'temperature': 0.7, 'top_p': 0.8, 'top_k': 20}",
-            "report = evaluation_report(None, sample_kind='BYOD', probes=rows)",
+            "report = evaluation_report(None, sample_kind='sample+BYOD' if CUSTOM_PROMPT.strip() else 'sample', probes=rows, task=INFERENCE_TASK, score_semantics=INFERENCE_SCORE_SEMANTICS)",
+            "torch.manual_seed(SEED + attempt)",
+            "'next_token_logit_max_abs_delta'",
             "'model_revision': MODEL_REVISION",
             "'model_license': MODEL_LICENSE",
             "writer.writerow(['prompt', 'kind', 'answer'])",
@@ -196,10 +203,10 @@ MODEL_CARD_LINK = "weights/smollm2-360m/MODEL_CARD.md"
 # ---------------------------------------------------------------------------
 # Shared checks. Everything below is source/structure validation only. Passing
 # these checks is NOT clean-runtime execution evidence under DIMER Notebook
-# Specification 2.0; see docs/release-verification.md for the release gate.
+# Specification 2.2; see docs/release-verification.md for the release gate.
 # ---------------------------------------------------------------------------
 
-NOTEBOOK_SPEC = "2.0"
+NOTEBOOK_SPEC = "2.2"
 ALLOWED_PROFILES = {"E2E", "ARTIFACT-INFERENCE", "TASK-INFERENCE", "MULTI-CAPABILITY", "SMOKE"}
 STATUS_TOKENS = ("Candidate", "Release-grade")
 PLACEHOLDER = re.compile(r"\b(TODO|TBD|FIXME)\b|Insert text here|Tooltip:", re.I)

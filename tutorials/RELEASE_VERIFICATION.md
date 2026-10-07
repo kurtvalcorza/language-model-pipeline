@@ -33,7 +33,7 @@ screenshot or evidence note.**
 | Notebook | Profile | Source conformance | Clean-runtime execution | Release status |
 |---|---|---|---|---|
 | `language_model_finetuning_colab.ipynb` | `E2E` | Enforced by static validator and tests | One one-pass default-path execution at blob `8a2c6ad4886d` (commit `d185817`, 2026-10-07, Colab CLI sequential execution on a fresh Colab Tesla T4, not a browser Run all; 12/12 cells, no restart, 0 errors; Section 10 re-run, BYOD and the activity not exercised — see `../docs/release-verification.md`). Before that: The only recorded run (2026-09-14, Kaggle T4, commit `e9d7e6b`, blob `469911578d05`) was of an earlier revision that installed into the kernel; it passed only after a kernel restart and with a `google.colab` shim, and the in-memory and reloaded openings differed unreported | **Blocked from release-grade label** |
-| `language_model_artifact_inference_colab.ipynb` | `ARTIFACT-INFERENCE` | Enforced by static validator and tests | No passing clean-run record at any revision. The default path reads the trusted sample bundle pinned in Section 4 (`SAMPLE_ARTIFACT`); that slot is empty until a bundle from a recorded hosted E2E run is published, so Run all currently stops at Section 4 with a message naming it | **Blocked from release-grade label** |
+| `language_model_artifact_inference_colab.ipynb` | `ARTIFACT-INFERENCE` | Enforced by static validator and tests | No passing clean-run record at any revision. The default path reads the trusted sample bundle pinned in Section 4 (`SAMPLE_ARTIFACT`); that slot is pinned to release asset `sample-bundle-v1` (whole-archive SHA-256 `f99348aab553…`), the bundle written by the 2026-10-07 Colab T4 E2E run at `d185817` | **Blocked from release-grade label** |
 
 Static validation, a previous notebook revision, a warm developer cache, or a blocked attempt is
 not a substitute for clean-runtime evidence. **These notebooks ship on `main` in this state.**
@@ -70,7 +70,7 @@ Follow steps 1–5, 7–9 of the supported procedure in `../docs/release-verific
 1. Start a **different** fresh runtime at the same commit.
 2. Default path: once `SAMPLE_ARTIFACT` is pinned, leave every field alone and choose **Run all**;
    Section 4 must print the sample artifact's URL, its pinned SHA-256 and `artifact_source` ≠
-   `upload dialog`, with no upload and no `google.colab` import. While the slot is empty, record
+   `upload dialog`, with no upload and no `google.colab` import. If the slot has been emptied, record
    that Run all stops at Section 4 with the message naming `USE_OWN_ARTIFACT`.
 3. Own-bundle path: set `USE_OWN_ARTIFACT = True`, `EXPECTED_ARTIFACT_ZIP_SHA256` to the preserved
    digest, and `ARTIFACT_ZIP_PATH` (Kaggle) or use the upload dialog (Colab). Supply the preserved

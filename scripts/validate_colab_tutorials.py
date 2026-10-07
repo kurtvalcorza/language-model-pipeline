@@ -224,6 +224,11 @@ def assert_educational_markdown(notebook: dict) -> None:
         )
 
 
+SAMPLE_BUNDLE_ASSET_URL = re.compile(
+    r"https://github\.com/kurtvalcorza/language-model-pipeline/releases/download/sample-bundle-v\d+/[A-Za-z0-9_.-]+\.zip(?=['\"])"
+)
+
+
 def validate_notebooks() -> None:
     main = load_notebook(MAIN)
     inference = load_notebook(INFERENCE)
@@ -234,6 +239,9 @@ def validate_notebooks() -> None:
         # The isolated-runtime bootstrap names the token variables only to REMOVE them from the
         # worker's environment (fleet sweep SWP-R); that one statement is not credential handling.
         text = code_text(notebook).replace(ISOLATED_ENV_DROP, "")
+        # The pinned sample-bundle release asset (LMA-B1, digest-checked) is the one allowed
+        # github.com/kurtvalcorza URL: it is a download, not a repository dependency.
+        text = re.sub(SAMPLE_BUNDLE_ASSET_URL, "", text)
         for forbidden in FORBIDDEN_CODE:
             if forbidden in text:
                 raise AssertionError(

@@ -144,8 +144,8 @@ Section 10 re-run, BYOD (REL12) and the optional activity were not exercised. Th
 of an older E2E blob needed a kernel restart and a `google.colab` shim and does not satisfy RUN10/ENV6; the
 companion has never been run. The
 current revisions replace the in-kernel install with the isolated environment, add the base validation loss, the
-reload reproduction check and the companion's sample-artifact slot (`SAMPLE_ARTIFACT`, still empty: it must be
-filled from a recorded hosted run of the E2E notebook before the companion's default path can complete). Static
+reload reproduction check and the companion's sample-artifact slot (`SAMPLE_ARTIFACT`, now
+pinned to release asset `sample-bundle-v1` (whole-archive SHA-256 `f99348aab553…`), the bundle written by the 2026-10-07 Colab T4 E2E run at `d185817`). Static
 validation (`tools/validate_release_assets.py`), nbformat validation, a
 `compile()` sweep over every code cell, and the offline unit suite passed on the tutorial source at the
 candidate revision, which is necessary but not sufficient. The registry status remains **Candidate** until a

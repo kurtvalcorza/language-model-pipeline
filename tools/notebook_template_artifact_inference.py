@@ -7,9 +7,10 @@ module and the same pinned base snapshot as the E2E notebook; it consumes an ada
 ``SAMPLE_ARTIFACT`` (an E2E-produced ZIP at an immutable location, whole-archive SHA-256 checked before
 extraction); ``USE_OWN_ARTIFACT`` switches to a user bundle (ZIP path, unpacked folder, or the Colab upload).
 
-The ``SAMPLE_ARTIFACT`` slot is empty in this revision: the bundle must come from a recorded hosted run of the
-fine-tuning notebook (it cannot be produced offline). Until it is pinned, the default path falls back to the
-E2E notebook's bundle when it exists in the same runtime, and otherwise stops with a message saying what to set.
+``SAMPLE_ARTIFACT`` is pinned to release asset ``sample-bundle-v1`` of this repository: the bundle written by the
+fine-tuning notebook (blob ``8a2c6ad4886d``, commit ``d185817``) in the 2026-10-07 Colab CLI T4 run recorded in
+``docs/verification/2026-10-07-colab-t4/``. If the slot is emptied, the default path falls back to the E2E
+notebook's bundle when it exists in the same runtime, and otherwise stops with a message saying what to set.
 """
 # ruff: noqa: E501  -- markdown prose and code-cell text are kept on single lines for readable rendering
 
@@ -31,7 +32,7 @@ TEMPLATE = {
     "profile": "ARTIFACT-INFERENCE",
     "mode": "GUIDED",
     "run_all": (
-        "Selecting **Run all** in a fresh supported runtime builds an isolated environment from the hash-locked pins (nothing is installed into the notebook's own Python, so no restart is needed), stages and digest-verifies the pinned base snapshot, obtains the trusted sample adapter bundle from the location pinned in Section 4 (`SAMPLE_ARTIFACT`: one bundle produced by the fine-tuning notebook, whose whole-archive SHA-256 is checked before extraction and whose files then pass the same archive, manifest, provenance and base-identity checks as any other bundle), attaches the adapter to the verified base, validates new prompts into an input manifest, generates with the adapter off and on and with seeded sampling, records whether the adapter changed anything, writes the evaluation report, and exports outputs and provenance — all inside this runtime, with no DIMER worker or service, no credential, no upload dialog and no `google.colab` import on the default path. A user-supplied bundle is the opt-in `USE_OWN_ARTIFACT` branch. **In this revision the `SAMPLE_ARTIFACT` slot is still empty** (§19, SART1/RUN2): the sample bundle can only come from a recorded hosted run of the fine-tuning notebook, so until the maintainer pins it Section 4 uses that notebook's bundle if it exists in this runtime and otherwise stops with a message saying what to set. This notebook remains a `Candidate` until that bundle is pinned and a clean run is recorded."
+        "Selecting **Run all** in a fresh supported runtime builds an isolated environment from the hash-locked pins (nothing is installed into the notebook's own Python, so no restart is needed), stages and digest-verifies the pinned base snapshot, obtains the trusted sample adapter bundle from the location pinned in Section 4 (`SAMPLE_ARTIFACT`: one bundle produced by the fine-tuning notebook, whose whole-archive SHA-256 is checked before extraction and whose files then pass the same archive, manifest, provenance and base-identity checks as any other bundle), attaches the adapter to the verified base, validates new prompts into an input manifest, generates with the adapter off and on and with seeded sampling, records whether the adapter changed anything, writes the evaluation report, and exports outputs and provenance — all inside this runtime, with no DIMER worker or service, no credential, no upload dialog and no `google.colab` import on the default path. A user-supplied bundle is the opt-in `USE_OWN_ARTIFACT` branch. The pinned sample bundle is release asset `sample-bundle-v1` of this repository, written by the fine-tuning notebook in a recorded Colab T4 run (blob `8a2c6ad4886d`, commit `d185817`; see `docs/release-verification.md`). This notebook remains a `Candidate` until a clean run of it is recorded and reviewed."
     ),
     "byod": (
         "New-input BYOD is the `CUSTOM_PROMPT` form field in Section 6 (empty by default): your own prompt passes through the same validation, generation and export cells as the sample prompts. A user-supplied adapter bundle is the separate opt-in `USE_OWN_ARTIFACT` branch in Section 4 (`ARTIFACT_ZIP_PATH` or `ARTIFACT_DIR` on Kaggle and Jupyter, the upload dialog on Colab), digest-checked and verified by `verify_artifact_bundle` before deserialisation. Uploads stay inside this runtime; do not upload confidential or restricted data unless you are authorised to process it here."
@@ -105,9 +106,10 @@ TEMPLATE = {
                 "fine-tuning notebook in a recorded run, published at an immutable location together with its whole-archive SHA-256 "
                 "and producer provenance. The ZIP is downloaded (or reused if already present), its SHA-256 is compared with the pinned "
                 "digest **before extraction**, and it is then extracted with `extract_zip_safely` and verified exactly as an uploaded "
-                "bundle would be. Nothing is uploaded and `google.colab` is not imported on this path. *In this revision the slot is "
-                "still empty*: the sample bundle can only come from a recorded hosted run, so until the maintainer pins it the cell "
-                "uses `outputs/language_model_finetuning_adapter_bundle.zip` if the fine-tuning notebook wrote it in this runtime, and "
+                "bundle would be. Nothing is uploaded and `google.colab` is not imported on this path. The pinned bundle is release asset "
+                "`sample-bundle-v1` of this repository, written by the fine-tuning notebook in a recorded Colab T4 run; the printed "
+                "`producer` names the notebook blob, commit and run. If you empty the slot, the cell uses "
+                "`outputs/language_model_finetuning_adapter_bundle.zip` when the fine-tuning notebook wrote it in this runtime, and "
                 "otherwise stops with a message saying what to set.\n\n"
                 "To verify **your own** bundle, set `USE_OWN_ARTIFACT = True` and give `ARTIFACT_ZIP_PATH` (a bundle ZIP already in "
                 "the runtime: Kaggle, Jupyter), or `ARTIFACT_DIR` (an unpacked bundle folder), or leave both empty on Colab to get the "
@@ -145,9 +147,9 @@ TEMPLATE = {
                 "EXPECTED_ARTIFACT_ZIP_SHA256 = ''  # @param {{type:\"string\"}}\n"
                 "# The trusted sample artifact: one bundle produced by the fine-tuning notebook in a recorded hosted run, published at an\n"
                 "# immutable location (a pinned release asset), with its whole-archive SHA-256 and producer provenance (notebook blob,\n"
-                "# repository commit, runtime) recorded here. Empty until the maintainer pins it; the digest is checked before extraction.\n"
-                "SAMPLE_ARTIFACT = {{'url': '', 'sha256': '', 'producer': {{}}}}\n"
-                "E2E_BUNDLE = Path('outputs') / 'language_model_finetuning_adapter_bundle.zip'  # same-runtime fallback while the slot is empty\n"
+                "# repository commit, runtime) recorded here (release sample-bundle-v1); the digest is checked before extraction.\n"
+                "SAMPLE_ARTIFACT = {{'url': 'https://github.com/kurtvalcorza/language-model-pipeline/releases/download/sample-bundle-v1/language_model_finetuning_adapter_bundle.zip', 'sha256': 'f99348aab5537bbccc26a0283f0fd6e714c0e3b58d27beb8c3d2586951ffaa35', 'producer': {{'notebook': 'tutorials/language_model_finetuning_colab.ipynb', 'notebook_blob': '8a2c6ad4886d1947f3b2fb8e8e33b3eb7e1317a6', 'commit': 'd185817b4a45049d51cbfa752737e31bf82b0762', 'run': '2026-10-07 Colab CLI 0.7.4 sequential execution, fresh Colab Tesla T4, default path', 'evidence': 'docs/verification/2026-10-07-colab-t4/language_model_finetuning_colab/', 'release': 'sample-bundle-v1', 'asset_id': 619976907}}}}\n"
+                "E2E_BUNDLE = Path('outputs') / 'language_model_finetuning_adapter_bundle.zip'  # same-runtime fallback if the slot is emptied\n"
                 "os.makedirs('outputs', exist_ok=True)\n"
                 "Path('work').mkdir(exist_ok=True)\n\n\n"
                 "def bundle_from_zip(archive_path, expected_sha, source):\n"
@@ -194,10 +196,10 @@ TEMPLATE = {
                 "    print({{'sample_artifact': SAMPLE_ARTIFACT['url'], 'pinned_sha256': SAMPLE_ARTIFACT['sha256'], 'producer': SAMPLE_ARTIFACT['producer']}})\n"
                 "    bundle_dir, archive_sha, artifact_source = bundle_from_zip(archive_path, SAMPLE_ARTIFACT['sha256'], f\"sample artifact: {{SAMPLE_ARTIFACT['url']}}\")\n"
                 "elif E2E_BUNDLE.is_file():\n"
-                "    print(f'SAMPLE_ARTIFACT is not pinned in this revision; using the fine-tuning notebook bundle found in this runtime at {{E2E_BUNDLE}}')\n"
+                "    print(f'SAMPLE_ARTIFACT is empty; using the fine-tuning notebook bundle found in this runtime at {{E2E_BUNDLE}}')\n"
                 "    bundle_dir, archive_sha, artifact_source = bundle_from_zip(E2E_BUNDLE, EXPECTED_ARTIFACT_ZIP_SHA256, f'same-runtime E2E output: {{E2E_BUNDLE}}')\n"
                 "else:\n"
-                "    raise RuntimeError('No trusted sample artifact is pinned in this revision (SAMPLE_ARTIFACT is empty) and no fine-tuning bundle exists at outputs/language_model_finetuning_adapter_bundle.zip in this runtime. To verify your own bundle, set USE_OWN_ARTIFACT = True and ARTIFACT_ZIP_PATH (Kaggle, Jupyter) or use the upload dialog (Colab).')\n"
+                "    raise RuntimeError('No trusted sample artifact is pinned (SAMPLE_ARTIFACT is empty) and no fine-tuning bundle exists at outputs/language_model_finetuning_adapter_bundle.zip in this runtime. To verify your own bundle, set USE_OWN_ARTIFACT = True and ARTIFACT_ZIP_PATH (Kaggle, Jupyter) or use the upload dialog (Colab).')\n"
                 "artifact_manifest, provenance = verify_artifact_bundle(bundle_dir)\n"
                 "print({{'artifact_source': artifact_source, 'zip_sha256': archive_sha, 'format': artifact_manifest['format'], 'formatVersion': artifact_manifest['formatVersion'], 'files': len(artifact_manifest['files']), 'total_bytes': artifact_manifest['totalBytes']}})\n"
                 "print({{'baseModel': provenance['baseModel'], 'baseModelRevision': provenance['baseModelRevision'], 'baseModelLicense': provenance.get('baseModelLicense'), 'quantized': provenance.get('quantized'), 'datasetDigest': provenance.get('datasetDigest'), 'dataset': provenance.get('dataset')}})\n"
@@ -443,8 +445,8 @@ TEMPLATE = {
         "Section 1 stops with `This notebook needs a Linux x86_64 runtime`: use Google Colab, Kaggle or a Linux Jupyter host. "
         "`The pinned uv wheel failed its size/SHA-256 check`: run Section 1 again; if it repeats, the download is being "
         "altered. `The isolated environment's Python process exited`: the worker crashed, usually out of memory — restart "
-        "the session and choose **Run all**. `No trusted sample artifact is pinned in this revision`: the default path has no "
-        "bundle to read yet — set `USE_OWN_ARTIFACT = True` with `ARTIFACT_ZIP_PATH`, or run the fine-tuning notebook in this "
+        "the session and choose **Run all**. `No trusted sample artifact is pinned`: `SAMPLE_ARTIFACT` was emptied, so the default path has no "
+        "bundle to read — restore it, or set `USE_OWN_ARTIFACT = True` with `ARTIFACT_ZIP_PATH`, or run the fine-tuning notebook in this "
         "runtime first. `… this runtime has no Colab upload dialog`, `ARTIFACT_ZIP_PATH … is not a file` or `ARTIFACT_DIR … is "
         "not a folder`: point `ARTIFACT_ZIP_PATH` at the bundle ZIP. `EXPECTED_ARTIFACT_ZIP_SHA256 is set but ARTIFACT_DIR names "
         "an unpacked folder`: a folder has no archive to digest-check; give the ZIP or clear the digest. `Upload exactly one "

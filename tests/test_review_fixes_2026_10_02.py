@@ -9,6 +9,7 @@ torch, no network). Stand-in model objects are labelled as such; they are not pr
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import functools
 import io
@@ -103,9 +104,9 @@ def _run_section_4(monkeypatch, tmp_path, **fields) -> tuple[dict, str]:
     """Execute the companion's Section 4 cell up to (not including) verify_artifact_bundle; returns (namespace, stdout)."""
     source = _set_param(_cell(ART, "SAMPLE_ARTIFACT = {"), **{k: v for k, v in fields.items() if k != "SAMPLE_ARTIFACT"})
     if "SAMPLE_ARTIFACT" in fields:
-        anchor = "SAMPLE_ARTIFACT = {'url': '', 'sha256': '', 'producer': {}}"
-        assert source.count(anchor) == 1
-        source = source.replace(anchor, f"SAMPLE_ARTIFACT = {fields['SAMPLE_ARTIFACT']!r}")
+        pinned = re.findall(r"^SAMPLE_ARTIFACT = \{.*\}$", source, re.M)
+        assert len(pinned) == 1
+        source = source.replace(pinned[0], f"SAMPLE_ARTIFACT = {fields['SAMPLE_ARTIFACT']!r}")
     block = source[: source.index("artifact_manifest, provenance = verify_artifact_bundle")]
     monkeypatch.chdir(tmp_path)
     ns = {"os": os, "Path": Path, "ARTIFACT_MANIFEST_NAME": "artifact-manifest.json", "sha256_of_file": sha256_of_file, "extract_zip_safely": extract_zip_safely}
@@ -152,11 +153,26 @@ def test_lma_b1_empty_slot_falls_back_to_a_same_runtime_e2e_bundle_or_stops_with
     _no_colab(monkeypatch)
     run = tmp_path / "run"
     run.mkdir()
-    with pytest.raises(RuntimeError, match="No trusted sample artifact is pinned in this revision .*USE_OWN_ARTIFACT = True and ARTIFACT_ZIP_PATH"):
-        _run_section_4(monkeypatch, run)
+    empty = {"url": "", "sha256": "", "producer": {}}
+    with pytest.raises(RuntimeError, match="No trusted sample artifact is pinned .*USE_OWN_ARTIFACT = True and ARTIFACT_ZIP_PATH"):
+        _run_section_4(monkeypatch, run, SAMPLE_ARTIFACT=empty)
     _zip_of(_standin_bundle(tmp_path / "src"), run / "outputs" / "language_model_finetuning_adapter_bundle.zip")
-    ns, out = _run_section_4(monkeypatch, run)
-    assert ns["artifact_source"].startswith("same-runtime E2E output:") and "SAMPLE_ARTIFACT is not pinned" in out
+    ns, out = _run_section_4(monkeypatch, run, SAMPLE_ARTIFACT=empty)
+    assert ns["artifact_source"].startswith("same-runtime E2E output:") and "SAMPLE_ARTIFACT is empty" in out
+
+
+def test_lma_b1_the_slot_is_pinned_to_the_recorded_e2e_bundle_release_asset():
+    """The pinned sample bundle: release sample-bundle-v1, produced by the recorded 2026-10-07 Colab T4 E2E run."""
+    source = _cell(ART, "SAMPLE_ARTIFACT = {")
+    slot = ast.literal_eval(re.search(r"^SAMPLE_ARTIFACT = (\{.*\})$", source, re.M).group(1))
+    assert slot["url"] == "https://github.com/kurtvalcorza/language-model-pipeline/releases/download/sample-bundle-v1/language_model_finetuning_adapter_bundle.zip"
+    assert re.fullmatch(r"[0-9a-f]{64}", slot["sha256"]) and slot["sha256"] == "f99348aab5537bbccc26a0283f0fd6e714c0e3b58d27beb8c3d2586951ffaa35"
+    producer = slot["producer"]
+    assert producer["notebook"] == "tutorials/language_model_finetuning_colab.ipynb" and len(producer["commit"]) == 40 and len(producer["notebook_blob"]) == 40
+    evidence = ROOT / producer["evidence"]
+    assert evidence.is_dir() and any(evidence.glob(f"*_{producer['commit'][:7]}_colab-cli-t4_output.ipynb"))
+    assert slot["sha256"] in (evidence / next(evidence.glob("*_output.ipynb")).name).read_text(encoding="utf-8")
+    assert "still empty" not in _markdown(ART) and "not pinned in this revision" not in source
 
 
 def test_lma_b1_the_default_path_never_imports_google_colab_and_the_gate_is_off():
@@ -593,3 +609,17 @@ def test_worker_colab_stubs_have_specs(name: str, real_google: bool, monkeypatch
         for n in names:
             sys.modules.pop(n, None)
         sys.modules.update(saved)
+
+
+def test_st1_allows_only_the_pinned_sample_bundle_asset_url():
+    """The ST1 guards exempt exactly the pinned release-asset download; any other github.com/kurtvalcorza URL still fails."""
+    import importlib.util as _ilu
+
+    spec = _ilu.spec_from_file_location("_validator", ROOT / "tools" / "validate_release_assets.py")
+    validator = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(validator)
+    st1 = dict(validator.FORBIDDEN_PATTERNS)["repository clone (ST1)"]
+    asset = "'https://github.com/kurtvalcorza/language-model-pipeline/releases/download/sample-bundle-v1/language_model_finetuning_adapter_bundle.zip'"
+    assert not st1.search(asset)
+    for bad in ("'https://github.com/kurtvalcorza/language-model-pipeline.git'", "'https://github.com/kurtvalcorza/language-model-pipeline/archive/main.zip'", "'https://github.com/kurtvalcorza/language-model-pipeline/releases/download/sample-bundle-v1/x.py'"):
+        assert st1.search(bad), bad

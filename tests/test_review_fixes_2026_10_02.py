@@ -408,7 +408,8 @@ def test_lmf_m5_release_records_tell_one_story_about_the_kaggle_run_and_the_curr
     registry = (ROOT / "tutorials/README.md").read_text(encoding="utf-8")
     for text in (docs, record):
         assert "469911578d05" in text and "restart" in text and "shim" in text
-        assert "No clean-runtime one-pass execution" in text or "no passing clean-run record" in text.lower()
+        # Until 2026-10-07 neither blob had a one-pass record; now both carry their recorded Colab CLI runs.
+        assert "No clean-runtime one-pass execution" in text or "no passing clean-run record" in text.lower() or ("8a2c6ad4886d" in text and "f3be29a5d95b" in text)
     assert "GITHUB_TOKEN" not in record and "qwen3-1.7b" not in record
     assert "verified — clean-runtime" not in registry and "needed a kernel restart" in registry
     assert "No clean-runtime execution of either standalone notebook has been recorded yet; clean GPU execution evidence" not in docs

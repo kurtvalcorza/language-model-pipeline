@@ -262,14 +262,23 @@ if os.environ.get("DIMER_KERNEL_IS_COLAB") == "1":
             raise RuntimeError("The notebook kernel could not open the upload dialog.")
         return reply[1]
 
+    import importlib.machinery
+
+    def _stub(name, package):
+        # A spec on every stub: importlib.util.find_spec("google.colab") (accelerate does this) raises on a None __spec__.
+        module = types.ModuleType(name)
+        module.__spec__ = importlib.machinery.ModuleSpec(name, None, is_package=package)
+        if package:
+            module.__path__ = []
+        return module
+
     try:
         import google
     except ImportError:
-        google = types.ModuleType("google")
-        google.__path__ = []
+        google = _stub("google", True)
         sys.modules["google"] = google
-    _colab = types.ModuleType("google.colab")
-    _files = types.ModuleType("google.colab.files")
+    _colab = _stub("google.colab", True)
+    _files = _stub("google.colab.files", False)
     _files.upload = _upload
     _colab.files = _files
     google.colab = _colab

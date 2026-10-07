@@ -558,3 +558,38 @@ def test_lmf_m6_decoding_activity_is_off_by_default_and_runs_with_a_stand_in():
     assert seeds == [7, 8] and "greedy: longest repeated 4-word phrase occurs 3x" in text and "sampled (seed 8)" in text
     assert "'sampled_answers_identical': False" in text and ns["longest_repeat"]("no repeats here at all") == 1
     assert "### Activity (optional): greedy versus sampled decoding" in _markdown(E2E)
+
+
+@pytest.mark.parametrize("name", [E2E, ART])
+@pytest.mark.parametrize("real_google", [False, True])
+def test_worker_colab_stubs_have_specs(name: str, real_google: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Colab CLI T4 run of f2053aa: accelerate's find_spec("google.colab") raised `google.colab.__spec__ is None` on the
+    isolated worker's spec-less stub (reference fix: chronos-2-forecasting-pipeline 33a2f53, CHR-M1)."""
+    import importlib.util
+
+    router = _cell(name, '_WORKER_SOURCE = r"""')
+    worker = router[router.index('_WORKER_SOURCE = r"""') + len('_WORKER_SOURCE = r"""') :]
+    worker = worker[: worker.index('"""')]
+    start = worker.index('if os.environ.get("DIMER_KERNEL_IS_COLAB") == "1":')
+    shim = worker[start : worker.index('_main = types.ModuleType("__main__")', start)]
+    names = ("google", "google.colab", "google.colab.files")
+    saved = {n: sys.modules[n] for n in names if n in sys.modules}
+    fake_google = types.ModuleType("google")
+    fake_google.__path__ = []
+    try:
+        for n in names:
+            sys.modules.pop(n, None)
+        # Both branches: no importable `google` (stub created) and an existing namespace package.
+        sys.modules["google"] = fake_google if real_google else None
+        monkeypatch.setenv("DIMER_KERNEL_IS_COLAB", "1")
+        exec(compile(shim, "worker-colab-shim", "exec"), {"os": os, "sys": sys, "types": types, "_send": None, "_recv": None})
+        for n in ("google.colab", "google.colab.files"):
+            spec = importlib.util.find_spec(n)  # raised ValueError before the fix
+            assert spec is not None and spec.name == n
+        assert sys.modules["google.colab"].__path__ == [] and callable(sys.modules["google.colab.files"].upload)
+        if not real_google:
+            assert importlib.util.find_spec("google") is not None
+    finally:
+        for n in names:
+            sys.modules.pop(n, None)
+        sys.modules.update(saved)

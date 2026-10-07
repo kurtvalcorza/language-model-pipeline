@@ -1,0 +1,187 @@
+[colab] Parsing notebook '/home/kurt/colab-runs/language-model-pipeline-d185817-f19b16/language_model_finetuning_colab_d185817_colab-cli-t4.ipynb'...
+[colab] Executing cell 1/12 - Infrastructure: build (or reuse) the isolated environment and route later cells to it...
+{'isolated_environment': '/content/dimer_isolated_env_d2d4b490ec05', 'reused': False, 'isolated_python': '3.12.12', 'kernel_python': '3.13.15', 'locked_packages': 71, 'setup_seconds': 56}
+{'routed_to': '/content/dimer_isolated_env_d2d4b490ec05/bin/python', 'worker_pid': 1596, 'worker_reused': False}
+[colab] Executing cell 2/12 - Infrastructure: record the runtime...
+{'notebook_source': {'repository': 'language-model-pipeline', 'repository_revision': 'f2053aa2c1a62d53a5195d5f88f1ce70398fc7dd', 'embedded_module': 'src/lmpipeline/pipeline.py', 'embedded_modules': ['src/lmpipeline/pipeline.py'], 'module_sha256': '393425c3efe5b5b46e0d0dfdf54f2454229097ba750ed73c2efa7b3c76fe4da9', 'generator': 'build_notebook.py/2.2', 'notebook_spec': '2.2'}, 'python': '3.12.12', 'executable': '/content/dimer_isolated_env_d2d4b490ec05/bin/python', 'torch': '2.14.0+cu130', 'transformers': '4.57.1', 'cuda': True}
+[colab] Executing cell 3/12 - language_model_finetuning-08...
+[colab] Executing cell 4/12 - Infrastructure: stage and digest-verify the pinned snapshot, then load the model...
+{'model_id': 'HuggingFaceTB/SmolLM2-360M-Instruct', 'revision': 'a10cc1512eabd3dde888204e902eca88bddb4951', 'license': 'apache-2.0', 'files': 13, 'total_bytes': 727118450}
+{'weights_dir': '/content/weights/smollm2-360m', 'fetched': ['all_results.json', 'config.json', 'eval_results.json', 'generation_config.json', 'merges.txt', 'model.safetensors', 'README.md', 'special_tokens_map.json', 'tokenizer.json', 'tokenizer_config.json', 'train_results.json', 'trainer_state.json', 'vocab.json']}
+{'verified_files': 13, 'revision': 'a10cc1512eabd3dde888204e902eca88bddb4951'}
+/content/dimer_isolated_env_d2d4b490ec05/lib/python3.12/site-packages/bitsandbytes/backends/cuda/ops.py:212: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+{'device': 'cuda:0', 'source': 'local-snapshot'}
+[colab] Executing cell 5/12 - language_model_finetuning-12...
+{'ceilings': {'MAX_SEQUENCE_LENGTH_CEILING': 2048, 'MAX_TOTAL_TRAIN_TOKENS': 50000000, 'MIN_TRAIN_EXAMPLES': 2, 'MAX_NEW_TOKENS_CEILING': 1024}, 'request': {'max_sequence_length': 512, 'epochs': 1, 'learning_rate': 0.0002, 'lora_rank': 8, 'lora_alpha': 16, 'seed': 42}}
+{'gpu': 'Tesla T4', 'vram_gib': 14.56, 'quantized_4bit': True, 'compute_dtype': 'bfloat16', 'source': 'local-snapshot'}
+{'sample_kind': 'sample', 'name': 'jpaulpoliquit/ph-sft-ai-authored-v1', 'splits': {'train': 96, 'validation': 24}, 'dataset_digest': 'b744d708c47877e0'}
+First training example:
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Sagutin ang tanong tungkol sa pang-abay.\n\nAno ang pang-abay at magbigay ng halimbawa?"
+    },
+    {
+      "role": "assistant",
+      "content": "Ang pang-abay ay salitang naglalarawan sa pandiwa, pang-uri, o kapwa pang-abay, na nagsasabi kung paano, kailan, saan, o gaano ginagawa ang isang kilos. Halimbawa, sa 'Tumakbo siya nang mabilis,' ang 'mabilis' ay pang-abay na naglalarawan kung paano tumakbo. Iba pang halimbawa ang 'kahapon' para sa panahon, 'dito' para sa lugar, at 'palagi' para sa dalas. Tumutulong ang pang-abay upang 
+
+Generating train split: 0 examples [00:00, ? examples/s]
+Generating train split: 513 examples [00:00, 20982.97 examples/s]
+
+Generating validation split: 0 examples [00:00, ? examples/s]
+Generating validation split: 5 examples [00:00, 1290.00 examples/s]
+
+Generating test split: 0 examples [00:00, ? examples/s]
+Generating test split: 5 examples [00:00, 1399.22 examples/s]
+[colab] Executing cell 6/12 - language_model_finetuning-14...
+[
+  {
+    "id": "jpaulpoliquit/ph-sft-ai-authored-v1:train",
+    "split": "train",
+    "records": 96,
+    "duplicates": 0,
+    "tokens": {
+      "total": 21714,
+      "longest": 297
+    }
+  },
+  {
+    "id": "jpaulpoliquit/ph-sft-ai-authored-v1:validation",
+    "split": "validation",
+    "records": 24,
+    "duplicates": 0,
+    "tokens": {
+      "total": 5634,
+      "longest": 294
+    }
+  }
+]
+findings: [{'input': 'leaked-split-probe', 'verdict': 'rejected', 'message': 'Split leakage: identical records in train and validation'}]
+tokens per split: {'train': 21714, 'validation': 5634}
+supervised (assistant) tokens per split: {'train': 14826, 'validation': 3840}
+<|im_start|>system
+You are a helpful AI assistant named SmolLM, trained by Hugging Face<|im_end|>
+<|im_start|>user
+Sagutin ang tanong tungkol sa pang-abay.
+
+Ano ang pang-abay at magbigay ng halimbawa?<|im_end|>
+<|im_start|>assistant
+⟦Ang pang-abay ay salitang naglalarawan sa pandiwa, pang-uri, o kapwa pang-abay, na nagsasabi kung paano, kailan, saan, o gaano ginagawa ang isang kilos. Halimbawa, sa 'Tumakbo siya nang mabilis,' ang 'mabilis' ay pang-abay na naglalarawan kung paano tumakbo. Iba pang halimbawa ang 'kahapon' para sa panahon, 'dito' para sa lugar, at 'palagi' para sa dalas. Tumutulong ang pang-abay upang maging mas tiyak at malinaw ang pagkakasabi ng isang kilos o pangyayari sa pangungusap.<|im_end|>⟧
+
+[colab] Executing cell 7/12 - language_model_finetuning-16...
+{'decoding_rule': 'greedy', 'max_new_tokens': 96, 'prompts': 2}
+/content/dimer_isolated_env_d2d4b490ec05/lib/python3.12/site-packages/bitsandbytes/backends/cuda/ops.py:464: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+PROMPT: Ipaliwanag sa simpleng Filipino kung ano ang machine learning.
+BASE:   Ipaliwanag na ang simpleng Filipino, kung ano ang machine learning.
+
+PROMPT: Magbigay ng tatlong paraan para mabawasan ang basura sa opisina.
+BASE:   Magbigay ng tatlong paraan para mabawasan ang basura sa opisina.
+
+{'base_validation_loss': 3.500956512366732, 'base_validation_perplexity': 33.14714245177882, 'rows': 24}
+[colab] Executing cell 8/12 - language_model_finetuning-18...
+{'lora_targets': ['down_proj', 'gate_proj', 'k_proj', 'o_proj', 'q_proj', 'up_proj', 'v_proj'], 'trainable_parameters': 4341760, 'all_parameters': 366162880, 'trainable_percent': 1.186}
+`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
+/content/dimer_isolated_env_d2d4b490ec05/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:1548: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. Starting in PyTorch 2.9, calling checkpoint without use_reentrant will raise an exception. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+epoch 1: train loss 3.2654 | validation loss 3.2640
+PROMPT:  Ipaliwanag sa simpleng Filipino kung ano ang machine learning.
+BASE:    Ipaliwanag na ang simpleng Filipino, kung ano ang machine learning.
+ADAPTED: Kung ano ang machine learning, ipagawa ng kultura, kung ano ang kultura, kung ano ang kultura, kung ano ang kultura, kung ano ang kultura, kung ano ang kultura, kung ano ang kultura, kung ano ang kultura, kung ano ang kultura, kung ano ang kultura
+
+PROMPT:  Magbigay ng tatlong paraan para mabawasan ang basura sa opisina.
+BASE:    Magbigay ng tatlong paraan para mabawasan ang basura sa opisina.
+ADAPTED: Magbabayag ng tatlong paraan para mabawasan ang basura sa opisina.
+
+validation loss base → adapted: 3.5010 → 3.2640 (change -0.2370 nats per supervised token; perplexity 33.1 → 26.2)
+{
+  "baseValidationLoss": 3.500956512366732,
+  "baseValidationPerplexity": 33.14714245177882,
+  "trainLoss": 3.2653914543277547,
+  "validationLoss": 3.264004859700799,
+  "testLoss": null,
+  "validationPerplexity": 26.154071066176588,
+  "epochs": [
+    {
+      "epoch": 1,
+      "trainLoss": 3.2653914543277547,
+      "validationLoss": 3.264004859700799,
+      "validationPerplexity": 26.154071066176588
+    }
+  ],
+  "wallSeconds": 55.847980260849,
+  "peakGpuMemoryBytes": 710546944,
+  "peakGpuMemoryGiB": 0.6617484092712402
+}
+[colab] Executing cell 9/12 - language_model_finetuning-20...
+{
+  "task": "language-model supervised fine-tuning (QLoRA adapter)",
+  "score_semantics": "mean cross-entropy per supervised assistant token; perplexity = exp(loss)",
+  "decoding_rule": "greedy",
+  "sample_kind": "sample",
+  "n_train": 96,
+  "n_validation": 24,
+  "baselines": [
+    {
+      "id": "baseValidationLoss",
+      "value": 3.500956512366732,
+      "units": "nats per supervised token",
+      "estimation": "the unadapted base model scored on the same manufactured validation split, before any adapter was attached; single run, no dispersion estimate"
+    },
+    {
+      "id": "baseValidationPerplexity",
+      "value": 33.14714245177882,
+      "units": "tokens",
+      "estimation": "the unadapted base model scored on the same manufactured validation split, before any adapter was attached; single run, no dispersion estimate"
+    }
+  ],
+  "model_id": "HuggingFaceTB/SmolLM2-360M-Instruct",
+  "model_revision": "a10cc1512eabd3dde888204e902eca88bddb4951",
+  "metrics": [
+    {
+      "id": "trainLoss",
+      "value": 3.2653914543277547,
+      "units": "nats per supervised token",
+      "estimation": "single seeded run on a manufactured validation split; no dispersion estimate"
+    },
+    {
+      "id": "validationLoss",
+      "value": 3.264004859700799,
+      "units": "nats per supervised token",
+      "estimation": "single seeded run on a manufactured validation split; no dispersion estimate"
+    },
+    {
+      "id": "validationPerplexity",
+      "value": 26.154071066176588,
+      "units": "tokens",
+      "estimation": "single seeded run on a manufactured validation split; no dispersion estimate"
+    }
+  ],
+  "verdict": "sample-sanity",
+  "reason": "optimisation metrics on 24 held-out row(s) manufactured from the training source; they measure format fit, not task quality",
+  "needs": "a held-out evaluation set from the target task with a rubric or human ratings for any task-quality claim; validation loss and perplexity only show that the adapter fits the format of the training distribution"
+}
+[colab] Executing cell 10/12 - language_model_finetuning-22...
+PROMPT:  Sumulat ng maikling payo para sa isang estudyanteng nagsisimula sa AI.
+BASE:    Hindi sa mga mga-kapilangan, mga mga-kapilangan, mga mga-kapilangan, mga mga-kapilangan, mga mga-kapilangan, mga mga-kapilangan, mga mga-kapilangan, mga mga-kapilangan, mga mga-kapilangan, mga
+ADAPTED: Sa isang estudyanteng nagsisimula, maikling payo ay nagpapatupos ng mga katawan sa mga kalikasan. Namatayin ang maikling payo ng mga katawan sa mga kalikasan, at ang maikling payo ay nagpapatupos ng mga katawan sa mga kalikasan. Namat
+
+PROMPT:  Ipaliwanag ang pagkakaiba ng training data at evaluation data sa dalawang pangungusap.
+BASE:    Ipaliwanag ang pagkakaiba ng training data at evaluation data sa dalawang pangungusap.
+ADAPTED: Ikaw ang training data at evaluation data ng training data sa dalawang pangungusap.
+
+{'new_prompts': 2, 'rendered_tokens': [56, 55]}
+[colab] Executing cell 11/12 - language_model_finetuning-24...
+RUN_DECODING_EXPERIMENT is off: set it to True and re-run this cell to compare greedy and seeded sampled answers on the adapted model.
+[colab] Executing cell 12/12 - language_model_finetuning-26...
+{'bundle': 'outputs/adapter-bundle', 'files': ['MODEL_CARD.md', 'README.md', 'adapter_config.json', 'adapter_model.safetensors', 'metrics.json', 'provenance.json', 'tokenizer/chat_template.jinja', 'tokenizer/merges.txt', 'tokenizer/special_tokens_map.json', 'tokenizer/tokenizer.json', 'tokenizer/tokenizer_config.json', 'tokenizer/vocab.json'], 'total_bytes': 22228333}
+/content/dimer_isolated_env_d2d4b490ec05/lib/python3.12/site-packages/bitsandbytes/backends/cuda/ops.py:212: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+PASS: fresh base + adapter reload from the verified snapshot; adapter weights present and active. Reloaded validation loss 3.2659 vs in-memory 3.2640 (|difference| 0.0019, tolerance 0.05): reproduced. Greedy 16-token openings: differ (a near-tie flipped under the dtype difference; see the prose).
+{'in_memory_adapted_opening': 'Kung ano ang machine learning, ipagawa ng kultura,', 'reloaded_adapted_opening': 'Kung ano ang machine learning, ipagawa ang kultura,', 'reloaded_adapter_off': 'Ipaliwanag na ang simpleng Filipino, kung ano ang', 'fresh_prompt': 'Kumusta! Sagutin sa isang maikling pangungusap.'}
+Artifact: outputs/language_model_finetuning_adapter_bundle.zip (21.2 MB) SHA-256 f99348aab5537bbccc26a0283f0fd6e714c0e3b58d27beb8c3d2586951ffaa35
+['adapter-bundle', 'language_model_finetuning_adapter_bundle.zip', 'language_model_finetuning_evaluation_report.json', 'language_model_finetuning_input_manifest.json', 'language_model_finetuning_probes.csv', 'language_model_finetuning_result.json']
+No download dialog in this runtime: the bundle ZIP is at /content/outputs/language_model_finetuning_adapter_bundle.zip
+[colab] Saving notebook with outputs to '/home/kurt/colab-runs/language-model-pipeline-d185817-f19b16/language_model_finetuning_colab_d185817_colab-cli-t4_output.ipynb'...

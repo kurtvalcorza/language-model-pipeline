@@ -133,13 +133,16 @@ runtime, not general estimates.
 | Date (UTC) | Commit / notebook blob | Executor | Path exercised | Wall | Outcome |
 |---|---|---|---|---|---|
 | 2026-09-14 | `e9d7e6b` / `469911578d05` | Kaggle T4 (`kurtvalcorza/dimer-nb2-language-model-finetuning` v2) | E2E default sample path (`language_model_finetuning_colab.ipynb`), an earlier revision that still installed into the kernel | 360.9 s | **PASSED only after one kernel restart** — pass 1 stopped at the install cell (`Core dependencies changed while older modules were loaded: cuda-bindings` → restart instruction); pass 2, after the executor restarted the kernel, ran 10/10 code cells with a leading `google.colab` shim cell. 28 files, 727 MB staged; train loss 3.266, validation loss 3.261, perplexity 26.1, 1.186 % trainable, `bfloat16` compute on the T4, 55.5 s loop, 0.66 GiB peak. The in-memory and reloaded 16-token openings differed and the cell still printed PASS (now reported explicitly by the reload check). **Not Run-all evidence** (RUN10/ENV6), and not evidence for the current isolated-runtime blob |
+| 2026-10-07 | `d185817` / `8a2c6ad4886d` | Colab CLI 0.7.4 sequential execution (`colab exec -f`), fresh Colab Tesla T4 — not a browser Run all; no execution counts, order from `exec.log` | E2E default sample path (`language_model_finetuning_colab.ipynb`), default settings only | 241.5 s (session wall) | **one pass, no restart, 0 errors** — 12/12 code cells in order (cell `language_model_finetuning-08`, the carried module definitions, prints nothing). Python 3.12.12, torch 2.14.0+cu130, transformers 4.57.1, peft 0.18.0, 4-bit, `bfloat16` compute, 1.186 % trainable. Validation loss base → adapted 3.5010 → 3.2640 (−0.2370 nats; perplexity 33.1 → 26.2); train loss 3.2654; 55.8 s loop; 0.66 GiB peak. Reload: 3.2659 vs 3.2640, \|Δ\| 0.0019 ≤ 0.05 → reproduced; greedy 16-token openings differ by one token (`ng`/`ang`), reported. Bundle ZIP 22,231,859 bytes, SHA-256 `f99348aab5537bbccc26a0283f0fd6e714c0e3b58d27beb8c3d2586951ffaa35`. Evidence: `docs/verification/2026-10-07-colab-t4/language_model_finetuning_colab/` — executed notebook SHA-256 `f2535a6be4b74673ba080fc56d185265b560cf61a83f8ea11e6eee7d2ea92ac9`, `run_summary.json` `d1a45c35621a115d768fdb2bf7de50a1c317b186e33c4c8edba5efe5e236807a`, `exec.log` `55f372582297a1d0011c0e8bcfc10343e3ab262d8b3181af77acae9fe496f4b2`. Not exercised: Section 10 re-run, BYOD (REL12), the optional activity, forms and download dialogs. The previous attempt at `f2053aa` failed in Section 3 (`google.colab.__spec__ is None` in the isolated worker), fixed in `d185817` |
 | | | | Companion path (`language_model_artifact_inference_colab.ipynb`) | | no run recorded at any revision |
 
 ## Current status
 
-No clean-runtime one-pass execution of either standalone notebook has been recorded at its current blob. The only
-recorded run is the 2026-09-14 Kaggle T4 run of an earlier E2E blob (table above), which needed a kernel restart
-and a `google.colab` shim and therefore does not satisfy RUN10/ENV6; the companion has never been run. The
+The E2E notebook has one recorded one-pass execution at blob `8a2c6ad4886d` (2026-10-07, Colab CLI sequential
+execution on a fresh Colab Tesla T4, default path only; table above). It is **not** a browser Run all, and the
+Section 10 re-run, BYOD (REL12) and the optional activity were not exercised. The earlier 2026-09-14 Kaggle T4 run
+of an older E2E blob needed a kernel restart and a `google.colab` shim and does not satisfy RUN10/ENV6; the
+companion has never been run. The
 current revisions replace the in-kernel install with the isolated environment, add the base validation loss, the
 reload reproduction check and the companion's sample-artifact slot (`SAMPLE_ARTIFACT`, still empty: it must be
 filled from a recorded hosted run of the E2E notebook before the companion's default path can complete). Static

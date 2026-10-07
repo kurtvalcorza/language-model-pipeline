@@ -1,6 +1,6 @@
 """Static release-asset validation for the language-model (QLoRA adapter) DIMER pipeline.
 
-Checks the two STANDALONE tutorial notebooks (DIMER Notebook Specification 2.0 §4) — the `E2E`
+Checks the two STANDALONE tutorial notebooks (DIMER Notebook Specification 2.2 §4) — the `E2E`
 fine-tuning tutorial and its `ARTIFACT-INFERENCE` companion — the tutorial registry, the snapshot model
 card, README, STATUS.md and weight documentation for source conformance and cross-document identity
 consistency, and runs the generator parity checks (PAR1–PAR3) for every notebook.
@@ -86,7 +86,7 @@ NOTEBOOKS = {
     "language_model_finetuning_colab.ipynb": {
         "template": "notebook_template",
         "profile": "E2E",
-        "byod_gates": ("USE_BYOD",),
+        "byod_gates": ("USE_BYOD", "RUN_DECODING_EXPERIMENT"),
         "expected_outputs": (
             "outputs/language_model_finetuning_input_manifest.json",
             "outputs/language_model_finetuning_evaluation_report.json",
@@ -111,9 +111,11 @@ NOTEBOOKS = {
             "new_prompt_manifest = validate_prompts(NEW_PROMPTS, 96, token_length=pipe.prompt_token_length)",
             "with model.disable_adapter():",
             "bundle_manifest = pipe.export_adapter_bundle(model, ADAPTER_DIR, metrics=METRICS, provenance=PROVENANCE)",
-            "pipe.model = pipe.reload_base()",
-            "reloaded = pipe.load_adapter(ADAPTER_DIR)",
+            "BASE_VALIDATION_LOSS = pipe.evaluate_loss(MASKED['validation'])",
+            "'baseValidationLoss': BASE_VALIDATION_LOSS",
+            "reloaded = pipe.load_adapter(ADAPTER_DIR, base_model=pipe.reload_base())",
             "if reloaded_opening == adapter_off_opening:",
+            "reloaded_validation_loss = pipe.evaluate_loss(MASKED['validation'], model=reloaded)",
             "'datasetDigest': DATASET_DIGEST",
             "'model_revision': MODEL_REVISION",
             "'model_license': MODEL_LICENSE",
@@ -143,7 +145,7 @@ NOTEBOOKS = {
     "language_model_artifact_inference_colab.ipynb": {
         "template": "notebook_template_artifact_inference",
         "profile": "ARTIFACT-INFERENCE",
-        "byod_gates": (),
+        "byod_gates": ("USE_OWN_ARTIFACT", "RUN_TAMPER_EXERCISE"),
         "expected_outputs": (
             "outputs/language_model_artifact_inference_input_manifest.json",
             "outputs/language_model_artifact_inference_evaluation_report.json",
@@ -151,8 +153,11 @@ NOTEBOOKS = {
             "outputs/language_model_artifact_inference_generations.csv",
         ),
         "code_markers": (
+            "USE_OWN_ARTIFACT = False",
+            "ARTIFACT_ZIP_PATH = ''",
             "ARTIFACT_DIR = ''",
             "EXPECTED_ARTIFACT_ZIP_SHA256 = ''",
+            "SAMPLE_ARTIFACT = {",
             "raise ValueError('Whole-ZIP SHA-256 mismatch: this is not the archive you were told to expect')",
             "extraction_root = extract_zip_safely(archive_path, Path('work') / 'external-artifact', size_limit_bytes=512 * 1024**2)",
             "artifact_manifest, provenance = verify_artifact_bundle(bundle_dir)",
@@ -163,7 +168,9 @@ NOTEBOOKS = {
             "validate_prompts(['   '], MAX_NEW_TOKENS)",
             "with model.disable_adapter():",
             "SAMPLING = {'do_sample': True, 'temperature': 0.7, 'top_p': 0.8, 'top_k': 20}",
-            "report = evaluation_report(None, sample_kind='BYOD', probes=rows)",
+            "report = evaluation_report(None, sample_kind='sample+BYOD' if CUSTOM_PROMPT.strip() else 'sample', probes=rows, task=INFERENCE_TASK, score_semantics=INFERENCE_SCORE_SEMANTICS)",
+            "torch.manual_seed(SEED + attempt)",
+            "'next_token_logit_max_abs_delta'",
             "'model_revision': MODEL_REVISION",
             "'model_license': MODEL_LICENSE",
             "writer.writerow(['prompt', 'kind', 'answer'])",
@@ -196,10 +203,10 @@ MODEL_CARD_LINK = "weights/smollm2-360m/MODEL_CARD.md"
 # ---------------------------------------------------------------------------
 # Shared checks. Everything below is source/structure validation only. Passing
 # these checks is NOT clean-runtime execution evidence under DIMER Notebook
-# Specification 2.0; see docs/release-verification.md for the release gate.
+# Specification 2.2; see docs/release-verification.md for the release gate.
 # ---------------------------------------------------------------------------
 
-NOTEBOOK_SPEC = "2.0"
+NOTEBOOK_SPEC = "2.2"
 ALLOWED_PROFILES = {"E2E", "ARTIFACT-INFERENCE", "TASK-INFERENCE", "MULTI-CAPABILITY", "SMOKE"}
 STATUS_TOKENS = ("Candidate", "Release-grade")
 PLACEHOLDER = re.compile(r"\b(TODO|TBD|FIXME)\b|Insert text here|Tooltip:", re.I)
@@ -237,9 +244,11 @@ COMMON_CODE_MARKERS = (
     "PINS = [",
     "NOTEBOOK_SOURCE = {",
     "SKIP_INSTALL = os.environ.get('DIMER_NOTEBOOK_CI_PREINSTALLED') == '1'",
-    "subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', *PINS], check=True)",
-    "importlib.metadata.packages_distributions()",
-    "importlib.invalidate_caches()",
+    "'--require-hashes', '--only-binary', ':all:'",
+    "'--managed-python'",
+    "if len(wheel) != UV_BYTES or hashlib.sha256(wheel).hexdigest() != UV_SHA256:",
+    "if hashlib.sha256(LOCK_TEXT.encode('utf-8')).hexdigest() != LOCK_SHA256:",
+    "_ip.input_transformers_cleanup.append(_route_to_isolated_runtime)",
     "platform.python_version()",
     "torch.__version__",
     "MANIFEST = {",
@@ -277,7 +286,9 @@ COMMON_MARKDOWN_MARKERS = (
 # Patterns that must never appear in tutorial code (comment-stripped), in any cell.
 FORBIDDEN_PATTERNS = (
     ("credential in clone URL", re.compile(r"https://[^/'\"\s]*@github\.com/|x-access-token:")),
-    ("repository clone (ST1)", re.compile(r"\bgit\b[^\n]*\bclone\b|github\.com/kurtvalcorza")),
+    # The one allowed github.com/kurtvalcorza URL in code is the companion's pinned sample-bundle release asset
+    # (Kurt 2026-10-04, LMA-B1): a whole-archive SHA-256-checked download, not a repository dependency.
+    ("repository clone (ST1)", re.compile(r"\bgit\b[^\n]*\bclone\b|github\.com/kurtvalcorza(?!/language-model-pipeline/releases/download/sample-bundle-v\d+/[A-Za-z0-9_.-]+\.zip['\"])")),
     ("mutable git dependency (MOD14)", re.compile(r"git\+https?://(?![^\n]*@[0-9a-f]{40}\b)")),
     ("editable self-install", re.compile(r"""['"](?:-e|--editable)['"]|pip install (?:-e|--editable)\b""")),
     ("repository package import (ST1)", re.compile(rf"^\s*(?:from|import)\s+{PACKAGE}\b", re.M)),
@@ -675,17 +686,14 @@ def _validate_parity(
 
 
 def _validate_bootstrap_guard(path: Path, code_cells: list[tuple[int, str, ast.Module]]) -> None:
-    """The stale-import guard must actually raise: `if stale:` whose body raises RuntimeError."""
-    raises = False
-    for _, _, tree in code_cells:
-        for node in ast.walk(tree):
-            if isinstance(node, ast.If) and isinstance(node.test, ast.Name) and node.test.id == "stale":
-                for sub in ast.walk(node):
-                    if isinstance(sub, ast.Raise) and isinstance(sub.exc, ast.Call):
-                        func = sub.exc.func
-                        if isinstance(func, ast.Name) and func.id == "RuntimeError":
-                            raises = True
-    _check(raises, f"{path.name}: install cell must raise RuntimeError when already-imported packages change")
+    """RUN1/RUN10/ENV6 (fleet sweep SWP-R): nothing is pip-installed into the kernel and no cell asks for a restart.
+    Exactly one cell runs in the kernel (the isolated-environment bootstrap); it reuses a matching environment."""
+    kernel = [source for _, source, _ in code_cells if "# dimer: kernel cell" in source]
+    _check(len(kernel) == 1, f"{path.name}: exactly one '# dimer: kernel cell' bootstrap cell is required, found {len(kernel)}")
+    code = "\n".join(source for _, source, _ in code_cells)
+    _check("'-m', 'pip', 'install'" not in code and "pip install" not in code, f"{path.name}: no cell may pip-install into the notebook kernel (RUN10)")
+    _check("Restart the runtime" not in code, f"{path.name}: no cell may ask for a runtime restart (RUN1)")
+    _check("_isolated_environment_ready()" in kernel[0], f"{path.name}: the bootstrap cell must reuse a matching isolated environment")
 
 
 def _validate_notebook_content(
@@ -708,6 +716,8 @@ def _validate_notebook_content(
     _check(not missing, f"{path.name}: missing required source markers: {missing}")
     present = [label for label, pattern in FORBIDDEN_PATTERNS if pattern.search(code)]
     _check(not present, f"{path.name}: forbidden/insecure source: {present}")
+    # The isolated-runtime bootstrap names the token variables only to remove them from the worker environment.
+    outside = outside.replace('for name in ("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"):', "")
     leaked = [marker for marker in FORBIDDEN_OUTSIDE_MODULE if marker in outside]
     _check(not leaked, f"{path.name}: direct library use outside the carried module cells (G2): {leaked}")
     worker = [marker for marker in FORBIDDEN_OUTSIDE_MODULE_FLEET if marker in outside_after_install]

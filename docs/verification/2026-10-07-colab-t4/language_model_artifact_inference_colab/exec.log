@@ -1,0 +1,102 @@
+[colab] Parsing notebook '/home/kurt/colab-runs/language-model-pipeline-70fd000-f1aed6/language_model_artifact_inference_colab_70fd000_colab-cli-t4.ipynb'...
+[colab] Executing cell 1/9 - Infrastructure: build (or reuse) the isolated environment and route later cells to it...
+{'isolated_environment': '/content/dimer_isolated_env_d2d4b490ec05', 'reused': False, 'isolated_python': '3.12.12', 'kernel_python': '3.13.15', 'locked_packages': 71, 'setup_seconds': 59}
+{'routed_to': '/content/dimer_isolated_env_d2d4b490ec05/bin/python', 'worker_pid': 1430, 'worker_reused': False}
+[colab] Executing cell 2/9 - Infrastructure: record the runtime...
+{'notebook_source': {'repository': 'language-model-pipeline', 'repository_revision': 'a5bc22c4366462e5436ae1d8ffae8cb33f9d52bc', 'embedded_module': 'src/lmpipeline/pipeline.py', 'embedded_modules': ['src/lmpipeline/pipeline.py'], 'module_sha256': '393425c3efe5b5b46e0d0dfdf54f2454229097ba750ed73c2efa7b3c76fe4da9', 'generator': 'build_notebook.py/2.2', 'notebook_spec': '2.2'}, 'python': '3.12.12', 'executable': '/content/dimer_isolated_env_d2d4b490ec05/bin/python', 'torch': '2.14.0+cu130', 'transformers': '4.57.1', 'cuda': True}
+[colab] Executing cell 3/9 - language_model_artifact_inference-08...
+[colab] Executing cell 4/9 - Infrastructure: stage and digest-verify the pinned snapshot, then load the model...
+{'model_id': 'HuggingFaceTB/SmolLM2-360M-Instruct', 'revision': 'a10cc1512eabd3dde888204e902eca88bddb4951', 'license': 'apache-2.0', 'files': 13, 'total_bytes': 727118450}
+{'weights_dir': '/content/weights/smollm2-360m', 'fetched': ['all_results.json', 'config.json', 'eval_results.json', 'generation_config.json', 'merges.txt', 'model.safetensors', 'README.md', 'special_tokens_map.json', 'tokenizer.json', 'tokenizer_config.json', 'train_results.json', 'trainer_state.json', 'vocab.json']}
+{'verified_files': 13, 'revision': 'a10cc1512eabd3dde888204e902eca88bddb4951'}
+/content/dimer_isolated_env_d2d4b490ec05/lib/python3.12/site-packages/bitsandbytes/backends/cuda/ops.py:212: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+{'device': 'cuda:0', 'source': 'local-snapshot'}
+[colab] Executing cell 5/9 - language_model_artifact_inference-12...
+{'sample_artifact': 'https://github.com/kurtvalcorza/language-model-pipeline/releases/download/sample-bundle-v1/language_model_finetuning_adapter_bundle.zip', 'pinned_sha256': 'f99348aab5537bbccc26a0283f0fd6e714c0e3b58d27beb8c3d2586951ffaa35', 'producer': {'notebook': 'tutorials/language_model_finetuning_colab.ipynb', 'notebook_blob': '8a2c6ad4886d1947f3b2fb8e8e33b3eb7e1317a6', 'commit': 'd185817b4a45049d51cbfa752737e31bf82b0762', 'run': '2026-10-07 Colab CLI 0.7.4 sequential execution, fresh Colab Tesla T4, default path', 'evidence': 'docs/verification/2026-10-07-colab-t4/language_model_finetuning_colab/', 'release': 'sample-bundle-v1', 'asset_id': 619976907}}
+archive sample-adapter-bundle.zip: 21.2 MB, sha256 f99348aab5537bbccc26a0283f0fd6e714c0e3b58d27beb8c3d2586951ffaa35
+{'artifact_source': 'sample artifact: https://github.com/kurtvalcorza/language-model-pipeline/releases/download/sample-bundle-v1/language_model_finetuning_adapter_bundle.zip', 'zip_sha256': 'f99348aab5537bbccc26a0283f0fd6e714c0e3b58d27beb8c3d2586951ffaa35', 'format': 'peft_adapter', 'formatVersion': 1, 'files': 12, 'total_bytes': 22228333}
+{'baseModel': 'HuggingFaceTB/SmolLM2-360M-Instruct', 'baseModelRevision': 'a10cc1512eabd3dde888204e902eca88bddb4951', 'baseModelLicense': 'apache-2.0', 'quantized': True, 'datasetDigest': 'b744d708c47877e055bc29820fcd551139ef486e59509e78f81362d17c806c49', 'dataset': {'source': 'jpaulpoliquit/ph-sft-ai-authored-v1', 'revision': '8333699c6cc7296cc69cefc09def010851ded919', 'license': 'apache-2.0', 'usage': 'tutorial-training-not-benchmark'}}
+{'training': {'method': 'qlora', 'epochs': 1, 'exportedEpoch': 1, 'epochSelection': 'last epoch; no selection by validation loss', 'learningRate': 0.0002, 'loraRank': 8, 'loraAlpha': 16, 'targetModules': ['down_proj', 'gate_proj', 'k_proj', 'o_proj', 'q_proj', 'up_proj', 'v_proj'], 'maxSequenceLength': 512, 'gradAccum': 2, 'seed': 42, 'nonQuantizedLayersTrainedIn': 'float32 (prepare_model_for_kbit_training upcast)'}, 'producer_runtime': {'python': '3.12.12', 'torch': '2.14.0+cu130', 'transformers': '4.57.1', 'peft': '0.18.0', 'gpu': 'Tesla T4', 'gpuVramGiB': 14.56317138671875, 'computeDtype': 'bfloat16', 'quantized4bit': True}}
+[colab] Executing cell 6/9 - language_model_artifact_inference-14...
+{'adapter_attached': True, 'r': 8, 'lora_alpha': 16, 'target_modules': ['v_proj', 'down_proj', 'gate_proj', 'q_proj', 'up_proj', 'o_proj', 'k_proj'], 'lora_b_max_abs': 0.008159281685948372, 'device': 'cuda:0', 'quantized_4bit': True, 'source': 'local-snapshot'}
+[colab] Executing cell 7/9 - language_model_artifact_inference-16...
+{'ceilings': {'MAX_NEW_TOKENS_CEILING': 1024, 'MAX_PROMPT_CHARS': 20000, 'MAX_SEQUENCE_LENGTH_CEILING': 2048}, 'decoding_rule': 'greedy'}
+{
+  "schema": {
+    "input": "one prompt string per request (rendered as a single user turn) or a list of {'role', 'content'} turns ending with a user turn",
+    "prompt_chars": [
+      1,
+      20000
+    ],
+    "max_new_tokens": [
+      1,
+      1024
+    ],
+    "rendered_prompt_tokens": [
+      1,
+      2048
+    ],
+    "decoding": "greedy (do_sample=False) unless sampling settings are passed explicitly"
+  },
+  "inputs": [
+    {
+      "id": "prompt-0",
+      "turns": 1,
+      "chars": 62,
+      "rendered_tokens": 46
+    },
+    {
+      "id": "prompt-1",
+      "turns": 1,
+      "chars": 70,
+      "rendered_tokens": 56
+    }
+  ],
+  "max_new_tokens": 96,
+  "verdict": "accepted",
+  "findings": [
+    {
+      "input": "blank-prompt-probe",
+      "verdict": "rejected",
+      "message": "every turn needs non-empty string content"
+    }
+  ],
+  "model_id": "HuggingFaceTB/SmolLM2-360M-Instruct",
+  "model_revision": "a10cc1512eabd3dde888204e902eca88bddb4951"
+}
+[colab] Executing cell 8/9 - language_model_artifact_inference-18...
+/content/dimer_isolated_env_d2d4b490ec05/lib/python3.12/site-packages/bitsandbytes/backends/cuda/ops.py:464: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+PROMPT:  Ipaliwanag sa simpleng Filipino kung ano ang machine learning.
+BASE:    Ipaliwanag na ang simpleng Filipino, kung ano ang machine learning.
+ADAPTED: Kung ano ang machine learning, ipagawa ang kultura, kung ano ang kultura, ipagawa ang kultura, kung ano ang kultura, ipagawa ang kultura, kung ano ang kultura, ipagawa ang kultura, kung ano ang kultura, ipagawa ang kultura, kung ano ang kultura, ipagawa
+
+PROMPT:  Sumulat ng maikling payo para sa isang estudyanteng nagsisimula sa AI.
+BASE:    Sumulat ng maikling payo para sa isang estudyanteng nagsisimula sa AI.
+ADAPTED: Sa isang estudyanteng nagsisimula, maikling payo ay nagpapatupos ng mga katawan sa mga kalikasan. Namatayin ang maikling payo ng mga katawan sa mga kalikasan, at nagpapatupos ang mga katawan sa mga kalikasan. Namatayin ang maikling pay
+
+{'lora_b_max_abs': 0.008159281685948372, 'next_token_logit_max_abs_delta': 2.87109375, 'answers_differ': [True, True], 'verdict': 'active: the adapter moved the next-token scores of the first prompt by up to 2.871; the greedy answers differ on 2 of 2 prompts'}
+sampled answer 1 (seed 42): Ipaliwanag ang machine learning na kung ano ang machine learning.
+
+sampled answer 2 (seed 43): Kung ano ang machine learning, yung sa simpeng Filipino.
+
+{
+  "task": "adapter-attached generation on new prompts with the adapter off and on; no score computed",
+  "score_semantics": "none: no labelled prompts exist, so no loss or score is computed; the base and adapted answers recorded under probes are qualitative evidence, not a measurement",
+  "decoding_rule": "greedy",
+  "sample_kind": "sample",
+  "n_train": 0,
+  "n_validation": 0,
+  "baselines": [],
+  "model_id": "HuggingFaceTB/SmolLM2-360M-Instruct",
+  "model_revision": "a10cc1512eabd3dde888204e902eca88bddb4951",
+  "metrics": [],
+  "verdict": "not-measurable",
+  "reason": "no labelled held-out split was scored",
+  "needs": "a held-out evaluation set from the target task with a rubric or human ratings (and a pre-adaptation baseline scored the same way) for any task-quality claim; validation loss and perplexity only show that the adapter fits the format of the training distribution"
+}
+['language_model_artifact_inference_evaluation_report.json', 'language_model_artifact_inference_generations.csv', 'language_model_artifact_inference_input_manifest.json', 'language_model_artifact_inference_result.json']
+[colab] Executing cell 9/9 - language_model_artifact_inference-20...
+RUN_TAMPER_EXERCISE is off: set it to True and re-run this cell to watch a one-bit change in the bundle be refused.
+[colab] Saving notebook with outputs to '/home/kurt/colab-runs/language-model-pipeline-70fd000-f1aed6/language_model_artifact_inference_colab_70fd000_colab-cli-t4_output.ipynb'...

@@ -657,6 +657,19 @@ def verify_artifact_bundle(bundle_dir: str | Path) -> tuple[dict[str, Any], dict
 # ---------------------------------------------------------------------------
 
 
+FINETUNING_TASK = "language-model supervised fine-tuning (QLoRA adapter)"
+FINETUNING_SCORE_SEMANTICS = "mean cross-entropy per supervised assistant token; perplexity = exp(loss)"  # noqa: E501
+# The ARTIFACT-INFERENCE companion computes no score: it attaches an external adapter and records
+# base versus adapted answers for new prompts as qualitative evidence only.
+INFERENCE_TASK = "adapter-attached generation on new prompts with the adapter off and on; no score computed"  # noqa: E501
+INFERENCE_SCORE_SEMANTICS = (
+    "none: no labelled prompts exist, so no loss or score is computed; the base and adapted "
+    "answers recorded under probes are qualitative evidence, not a measurement"
+)
+# Pre-adaptation metrics the training loop may record; the report lists them under `baselines`.
+BASELINE_METRIC_IDS = ("baseValidationLoss", "baseValidationPerplexity")
+
+
 def evaluation_report(
     metrics: Mapping[str, Any] | None,
     *,
@@ -664,6 +677,9 @@ def evaluation_report(
     n_train: int = 0,
     n_validation: int = 0,
     probes: Sequence[Mapping[str, str]] | None = None,
+    task: str | None = None,
+    score_semantics: str | None = None,
+    baselines: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Evaluation stage: a machine-readable report even when nothing is measurable.
 
@@ -671,23 +687,42 @@ def evaluation_report(
     ``validationLoss``, ``validationPerplexity`` - the ids the repository's model card and result
     contract use). They are optimisation evidence on a manufactured validation split, so the best
     verdict is ``sample-sanity``; task quality stays ``not-measurable`` without a held-out task
-    set. ``probes`` (base vs adapted answers) are recorded as qualitative evidence only."""
+    set. ``probes`` (base vs adapted answers) are recorded as qualitative evidence only.
+
+    ``task`` and ``score_semantics`` default to the fine-tuning wording; the inference companion
+    passes ``INFERENCE_TASK`` / ``INFERENCE_SCORE_SEMANTICS`` because it computes no score.
+    ``baseValidationLoss`` / ``baseValidationPerplexity`` in ``metrics`` (the unadapted base model
+    scored on the same validation split) are listed under ``baselines``, as are any explicit
+    ``baselines`` entries."""
+    baseline_entries = [dict(b) for b in baselines] if baselines else []
+    for key in BASELINE_METRIC_IDS:
+        value = None if metrics is None else metrics.get(key)
+        if value is not None:
+            baseline_entries.append(
+                {
+                    "id": key,
+                    "value": float(value),
+                    "units": "nats per supervised token" if key.endswith("Loss") else "tokens",
+                    "estimation": "the unadapted base model scored on the same manufactured validation split, before any adapter was attached; single run, no dispersion estimate",  # noqa: E501
+                }
+            )
     base = {
-        "task": "language-model supervised fine-tuning (QLoRA adapter)",
-        "score_semantics": "mean cross-entropy per supervised assistant token; perplexity = exp(loss)",  # noqa: E501
+        "task": task or FINETUNING_TASK,
+        "score_semantics": score_semantics or FINETUNING_SCORE_SEMANTICS,
         "decoding_rule": DECODING_RULE,
         "sample_kind": sample_kind,
         "n_train": int(n_train),
         "n_validation": int(n_validation),
-        "baselines": [],
+        "baselines": baseline_entries,
         "probes": [dict(p) for p in probes] if probes else [],
         "model_id": MODEL_ID,
         "model_revision": MODEL_REVISION,
     }
     needs = (
-        "a held-out evaluation set from the target task with a rubric or human ratings (and a "
-        "pre-adaptation baseline scored the same way) for any task-quality claim; validation loss "
-        "and perplexity only show that the adapter fits the format of the training distribution"
+        "a held-out evaluation set from the target task with a rubric or human ratings"
+        + ("" if baseline_entries else " (and a pre-adaptation baseline scored the same way)")
+        + " for any task-quality claim; validation loss and perplexity only show that the adapter "
+        "fits the format of the training distribution"
     )
     validation_loss = None if metrics is None else metrics.get("validationLoss")
     if validation_loss is None:

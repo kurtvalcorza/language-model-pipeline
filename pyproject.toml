@@ -55,7 +55,7 @@ lmpipeline = ["data/*.yaml", "schemas/*.json"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-extend-exclude = ["tutorials/*.ipynb"]
+extend-exclude = ["tutorials/*.ipynb", "docs/verification/**/*.ipynb"]  # executed evidence notebooks are byte-exact executor output
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

@@ -13,6 +13,7 @@ load_notebook = VALIDATOR["load_notebook"]
 markdown_text = VALIDATOR["markdown_text"]
 validate_member_path = VALIDATOR["validate_member_path"]
 validate_notebooks = VALIDATOR["validate_notebooks"]
+ISOLATED_ENV_DROP = VALIDATOR["ISOLATED_ENV_DROP"]
 
 
 def test_notebooks_exist_and_validate():
@@ -76,7 +77,7 @@ def test_smollm2_360m_is_pinned_and_registry_is_carried_for_reference():
     assert '"meta-llama/Llama-3.2-3B-Instruct"' in code
     # Standalone carrier: one pinned model, no per-run base-model dropdown and no credential path.
     assert "BASE_MODEL_KEY" not in code
-    assert "HF_TOKEN" not in code
+    assert "HF_TOKEN" not in code.replace(ISOLATED_ENV_DROP, "")  # the bootstrap only removes it
 
 
 def test_snapshot_manifest_identity_is_asserted_before_fetch():
@@ -116,7 +117,7 @@ def test_tutorial_markdown_is_substantive():
 
 def test_inference_notebook_verifies_bundle_against_the_pinned_base():
     code = code_text(load_notebook(INFERENCE))
-    assert "HF_TOKEN" not in code
+    assert "HF_TOKEN" not in code.replace(ISOLATED_ENV_DROP, "")  # the bootstrap only removes it
     assert "fetched = stage_missing_files(WEIGHTS_DIR, allow_download=True)" in code
     assert "dimer-base-manifest.json" in code
     assert "artifact_manifest, provenance = verify_artifact_bundle(bundle_dir)" in code

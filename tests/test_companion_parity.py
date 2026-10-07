@@ -95,5 +95,7 @@ def test_st1_primary_path_has_no_repository_dependency(notebook: dict) -> None:
     assert "git" not in re.findall(r"subprocess\.run\(\[([^\]]*)\]", code).__str__()
     assert f"import {TEMPLATE['package']}" not in code
     assert f"from {TEMPLATE['package']}" not in code
-    assert "github.com/kurtvalcorza" not in code
+    # The pinned, digest-checked sample-bundle release asset (LMA-B1) is a download, not a repository dependency.
+    code_without_sample = re.sub(r"https://github\.com/kurtvalcorza/language-model-pipeline/releases/download/sample-bundle-v\d+/[A-Za-z0-9_.-]+\.zip(?=['\"])", "", code)
+    assert "github.com/kurtvalcorza" not in code_without_sample
     assert "worker.run(" not in code and "worker_cli(" not in code

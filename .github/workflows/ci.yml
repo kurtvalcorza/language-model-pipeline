@@ -53,7 +53,6 @@ jobs:
       - name: Standalone notebook parity (NOTEBOOK_SPEC 1.1 PAR3)
         run: |
           python tools/build_notebook.py --check
-          python tools/build_notebook.py --check --template tools/notebook_template_artifact_inference.py
 
       - name: Prove the suite needs no network
         # The fixture corpus is committed and the tests use a fake tokenizer specifically so

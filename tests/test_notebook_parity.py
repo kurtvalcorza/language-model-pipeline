@@ -100,7 +100,7 @@ def test_par2_inline_manifest_and_pins_match_repository(notebook: dict) -> None:
     assert inline_pins == build._pins(ROOT, TEMPLATE)
     meta = notebook["metadata"]["dimer"]
     assert meta["standalone"] is True
-    assert meta["notebook_spec"] == build.NOTEBOOK_SPEC
+    assert meta["notebook_spec"] == TEMPLATE.get("notebook_spec", build.NOTEBOOK_SPEC)
     pkg_dir = TEMPLATE.get("package_dir", f"src/{TEMPLATE['package']}")
     entry = TEMPLATE.get("entry_module", "pipeline.py")
     assert meta["generated_from"]["module"] == f"{pkg_dir}/{entry}"
@@ -121,5 +121,10 @@ def test_st1_primary_path_has_no_repository_dependency(notebook: dict) -> None:
     assert "git" not in re.findall(r"subprocess\.run\(\[([^\]]*)\]", code).__str__()
     assert f"import {TEMPLATE['package']}" not in code
     assert f"from {TEMPLATE['package']}" not in code
-    # own-repository clone/install (ST1); SHA-pinned upstream git dependencies are allowed
-    assert "github.com/kurtvalcorza" not in code
+    # own-repository clone/install (ST1); SHA-pinned upstream git dependencies are allowed. The one exception is the
+    # pinned sample-artifact URL (NOTEBOOK_SPEC 3.0 SART6), allowed only in the carried module cell, as a whole token.
+    validator = _load("validate_release_assets")
+    for cell in _cells(notebook, "code"):
+        embedded = bool(cell.get("metadata", {}).get("dimer", {}).get("embedded_module"))
+        allowed = (validator.PINNED_SAMPLE_ARTIFACT_URL,) if embedded else ()
+        assert validator.disallowed_own_references(_source(cell), allowed) == []

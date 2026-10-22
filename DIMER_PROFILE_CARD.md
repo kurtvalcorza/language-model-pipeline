@@ -5,7 +5,6 @@
 
 [![GitHub Repository](https://img.shields.io/badge/GitHub-language--model--pipeline-181717?style=flat&logo=github&logoColor=white)](https://github.com/kurtvalcorza/language-model-pipeline)
 [![Open Fine-Tuning Tutorial In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb)
-[![Open Artifact Inference In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb)
 
 This repository-level profile predates the DIMER Model Card Specification. The normative per-snapshot cards are [`weights/qwen3-0.6b/MODEL_CARD.md`](weights/qwen3-0.6b/MODEL_CARD.md) and [`weights/smollm2-360m/MODEL_CARD.md`](weights/smollm2-360m/MODEL_CARD.md).
 
@@ -29,8 +28,7 @@ The repository includes two self-contained, interactive Jupyter notebooks for ha
 
 | Tutorial Notebook | Badge Link | Focus & Lifecycle Stages |
 |---|---|---|
-| **Language-Model Fine-Tuning** | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb) | Pinned base-model acquisition → Dataset normalization → Chat template formatting & assistant masking → Baseline prompt probe → 4-bit QLoRA SFT → Before/after evaluation → Adapter bundle export → In-memory clean reload |
-| **Artifact Inference** | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb) | Standalone adapter package upload → Cryptographic manifest & provenance verification → Base-model resolution → Dynamic PEFT attachment → Multi-turn conversational generation |
+| **Language-Model Fine-Tuning** | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb) | Pinned base-model acquisition → Dataset normalization → Chat template formatting & assistant masking → Baseline prompt probe → 4-bit QLoRA SFT → Before/after evaluation → Adapter bundle export → In-memory clean reload → External-artifact section (pinned sample bundle from a recorded earlier run: digest check before extraction, manifest and base-provenance verification, PEFT attachment, generation) |
 
 ---
 
@@ -211,7 +209,7 @@ Trained adapters can be deployed across three industry-standard patterns:
 1. **High-Throughput Multi-LoRA Serving (vLLM / SGLang / TGI):**
    Shares a single frozen base model across memory while dynamically applying user-specific adapters per request.
 2. **Local Python Integration (PEFT & Transformers):**
-   Loads the base model and dynamically attaches the adapter in evaluation mode (`is_trainable=False`) as demonstrated in the [Artifact Inference](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb) notebook.
+   Loads the base model and dynamically attaches the adapter in evaluation mode (`is_trainable=False`) as demonstrated in Section 11 of the [fine-tuning tutorial](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb) notebook.
 3. **Zero-Overhead Weight Merging:**
    Permanently combines the adapter delta weights into the base model parameters via `model.merge_and_unload()`, producing a standard, standalone Hugging Face checkpoint loadable by any engine (llama.cpp, Ollama, ONNX).
 

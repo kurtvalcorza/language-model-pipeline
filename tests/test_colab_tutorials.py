@@ -6,7 +6,6 @@ import pytest
 VALIDATOR = run_path(
     Path(__file__).resolve().parents[1] / "scripts" / "validate_colab_tutorials.py"
 )
-INFERENCE = VALIDATOR["INFERENCE"]
 MAIN = VALIDATOR["MAIN"]
 code_text = VALIDATOR["code_text"]
 load_notebook = VALIDATOR["load_notebook"]
@@ -18,12 +17,11 @@ ISOLATED_ENV_DROP = VALIDATOR["ISOLATED_ENV_DROP"]
 
 def test_notebooks_exist_and_validate():
     assert MAIN.is_file()
-    assert INFERENCE.is_file()
     validate_notebooks()
 
 
 def test_notebooks_are_unexecuted():
-    for path in (MAIN, INFERENCE):
+    for path in (MAIN,):
         notebook = load_notebook(path)
         for cell in notebook["cells"]:
             if cell.get("cell_type") == "code":
@@ -115,13 +113,11 @@ def test_tutorial_markdown_is_substantive():
     assert len(markdown.split()) > 900
 
 
-def test_inference_notebook_verifies_bundle_against_the_pinned_base():
-    code = code_text(load_notebook(INFERENCE))
-    assert "HF_TOKEN" not in code.replace(ISOLATED_ENV_DROP, "")  # the bootstrap only removes it
-    assert "fetched = stage_missing_files(WEIGHTS_DIR, allow_download=True)" in code
-    assert "dimer-base-manifest.json" in code
-    assert "artifact_manifest, provenance = verify_artifact_bundle(bundle_dir)" in code
-    assert "PeftModel.from_pretrained" in code
+def test_section_11_verifies_the_external_bundle_against_the_pinned_base():
+    code = code_text(load_notebook(MAIN))
+    assert "= verify_artifact_bundle(external_bundle_dir)" in code
+    assert "pipe.load_adapter(external_bundle_dir, base_model=pipe.reload_base())" in code
+    assert "PeftModel.from_pretrained" in code  # inside the carried module's load_adapter
 
 
 def test_no_training_rows_written_to_artifact_code():

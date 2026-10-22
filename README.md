@@ -52,22 +52,18 @@ capability without requiring DIMER Workbench.
 
 [![Open Fine-Tuning Tutorial In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb)
 
-[![Open Artifact Inference In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb)
-
-Both notebooks are declared under DIMER Notebook Specification 2.2 and are **standalone** (§4):
-`tools/build_notebook.py` generates them from `tools/notebook_template.py` /
-`tools/notebook_template_artifact_inference.py`, and each carries `src/lmpipeline/pipeline.py`
+The notebook is declared under DIMER Notebook Specification 3.0 (kind `TUTORIAL`) and is **standalone** (§4):
+`tools/build_notebook.py` generates it from `tools/notebook_template.py`, and it carries `src/lmpipeline/pipeline.py`
 verbatim, the pinned base identity (`HuggingFaceTB/SmolLM2-360M-Instruct` at revision
 `a10cc1512eabd3dde888204e902eca88bddb4951`), the snapshot's per-file SHA-256 manifest and the exact
 `pyproject.toml` runtime pins, so the exported `.ipynb` keeps working without this repository
-(parity enforced by `tests/test_notebook_parity.py`, `tests/test_companion_parity.py` and
+(parity enforced by `tests/test_notebook_parity.py` and
 `tools/validate_release_assets.py`). `language_model_finetuning_colab.ipynb` (`E2E`) validates the
 pinned public sample or a gated BYOD JSONL set into an input manifest, masks the loss to assistant
 tokens, runs a readable QLoRA loop, writes an evaluation report (`sample-sanity` on the manufactured
 validation split), exports a manifested adapter bundle and proves a fresh reload against the verified
-base. `language_model_artifact_inference_colab.ipynb` (`ARTIFACT-INFERENCE`) verifies an externally
-produced bundle before any state is loaded, attaches it with no network fallback, validates new prompts
-and generates with the adapter off and on. BYOD is optional and gated off by default. See
+base. Section 11 is the external-artifact section (NOTEBOOK_SPEC 3.0 §19.1): after the fresh reload, Interpretation and the Conclusion it downloads the pinned sample adapter bundle (release asset `sample-bundle-v1`, the ZIP this notebook's own default path exported in the recorded 2026-10-07 Colab T4 run; never the current run's export), checks its whole-ZIP SHA-256 before extraction, verifies the manifest, the base identity and revision and the data contract, attaches it to a fresh copy of the verified base, answers two sample prompts with the adapter off and on, and writes `outputs/external_artifact/`. The former artifact-inference companion notebook is retired (Notebook
+Specification 3.0 KND11). BYOD is optional and gated off by default. See
 [`tutorials/README.md`](tutorials/README.md) for the registry and
 [`docs/release-verification.md`](docs/release-verification.md) for the release gate. The standalone
 tutorials pin one base model; the other registry entries are exercised by the DIMER worker.

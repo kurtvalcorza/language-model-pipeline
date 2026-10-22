@@ -29,11 +29,8 @@ The pipeline repository provides two ready-to-run interactive Google Colab noteb
 
 - **QLoRA Fine-Tuning Tutorial**:  
   [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb) [`language_model_finetuning_colab.ipynb`](https://github.com/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_finetuning_colab.ipynb)  
-  *Supervised QLoRA fine-tuning of the pinned base model on chat-formatted data (shipped Filipino Q&A pairs), with baseline comparison, adapter export, and fresh reload.*
+  *Supervised QLoRA fine-tuning of the pinned base model on chat-formatted data (shipped Filipino Q&A pairs), with baseline comparison, adapter export, and fresh reload; Section 11 then verifies and serves an external adapter bundle (the pinned `sample-bundle-v1` release asset from a recorded earlier run) without training. The separate artifact-inference notebook was retired under DIMER Notebook Specification 3.0.*
 
-- **Adapter Artifact Inference Tutorial**:  
-  [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb) [`language_model_artifact_inference_colab.ipynb`](https://github.com/kurtvalcorza/language-model-pipeline/blob/main/tutorials/language_model_artifact_inference_colab.ipynb)  
-  *Consume an externally supplied PEFT adapter ZIP, verify its manifest and base-model provenance, attach it to the pinned base snapshot, and generate text; no training occurs.*
 
 > [!NOTE]
 > Both notebooks require a Colab GPU runtime (*Runtime ▸ Change runtime type ▸ T4 GPU*); QLoRA's 4-bit path uses float16 on a T4 and bfloat16 on Ampere or newer.

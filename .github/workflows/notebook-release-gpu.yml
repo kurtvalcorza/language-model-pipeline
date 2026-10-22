@@ -55,10 +55,6 @@ jobs:
             /content/language-model-tutorial \
             /content/language-model-finetuner \
             /content/dimer-language-model-artifact
-          rm -f \
-            /content/artifact_inference_predictions.jsonl \
-            /content/artifact_inference_predictions.csv \
-            /content/artifact_inference_provenance.json
           python -m pip install --upgrade pip==26.2.1
           python -m pip install nbconvert==7.17.1 ipykernel==7.3.0
 
@@ -110,24 +106,6 @@ jobs:
             --ExecutePreprocessor.timeout=4500 \
             --ExecutePreprocessor.kernel_name=python3
 
-      - name: Stage E2E artifact as external input
-        id: prepare-inference
-        run: |
-          test -f /content/language-model-tutorial/dimer-language-model-adapter.zip
-          echo 'COLAB_UPLOAD_QUEUE=[["/content/language-model-tutorial/dimer-language-model-adapter.zip"]]' \
-            >> "$GITHUB_ENV"
-
-      - name: Execute ARTIFACT-INFERENCE in a fresh kernel
-        id: artifact-inference
-        run: |
-          jupyter nbconvert \
-            --to notebook \
-            --execute tutorials/language_model_artifact_inference_colab.ipynb \
-            --output executed-language-model-artifact-inference.ipynb \
-            --output-dir /content \
-            --ExecutePreprocessor.timeout=2700 \
-            --ExecutePreprocessor.kernel_name=python3
-
       - name: Assert release outputs
         id: assert-outputs
         run: |
@@ -135,28 +113,20 @@ jobs:
           test -f /content/language-model-tutorial/tutorial_predictions.jsonl
           test -f /content/language-model-tutorial/tutorial_predictions.csv
           test -f /content/language-model-tutorial/tutorial_metrics.json
-          test -f /content/artifact_inference_predictions.jsonl
-          test -f /content/artifact_inference_predictions.csv
-          test -f /content/artifact_inference_provenance.json
           test -f /content/executed-language-model-e2e.ipynb
-          test -f /content/executed-language-model-artifact-inference.ipynb
 
       - name: Upload supplemental execution evidence
         id: upload-evidence
-        if: ${{ always() && steps.e2e.outcome == 'success' && steps.prepare-inference.outcome == 'success' && steps.artifact-inference.outcome == 'success' && steps.assert-outputs.outcome == 'success' }}
+        if: ${{ always() && steps.e2e.outcome == 'success' && steps.assert-outputs.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: language-model-notebook-release-evidence
           path: |
             /content/executed-language-model-e2e.ipynb
-            /content/executed-language-model-artifact-inference.ipynb
             /content/language-model-tutorial/dimer-language-model-adapter.zip
             /content/language-model-tutorial/tutorial_predictions.jsonl
             /content/language-model-tutorial/tutorial_predictions.csv
             /content/language-model-tutorial/tutorial_metrics.json
-            /content/artifact_inference_predictions.jsonl
-            /content/artifact_inference_predictions.csv
-            /content/artifact_inference_provenance.json
           if-no-files-found: error
           retention-days: 30
 
@@ -164,14 +134,10 @@ jobs:
         if: always()
         env:
           E2E_OUTCOME: ${{ steps.e2e.outcome }}
-          PREPARE_OUTCOME: ${{ steps.prepare-inference.outcome }}
-          INFERENCE_OUTCOME: ${{ steps.artifact-inference.outcome }}
           OUTPUT_OUTCOME: ${{ steps.assert-outputs.outcome }}
           UPLOAD_OUTCOME: ${{ steps.upload-evidence.outcome }}
         run: |
           if [[ "$E2E_OUTCOME" == "success" && \
-                "$PREPARE_OUTCOME" == "success" && \
-                "$INFERENCE_OUTCOME" == "success" && \
                 "$OUTPUT_OUTCOME" == "success" && \
                 "$UPLOAD_OUTCOME" == "success" ]]; then
             RELEASE_STATUS="PASS"
@@ -186,8 +152,6 @@ jobs:
             echo "- Finetuner runtime revision: \`3772f0ca4e0f7130ffd5f826ea40f43b7212339e\`"
             echo "- GPU: \`$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)\`"
             echo "- E2E execution: \`${E2E_OUTCOME}\`"
-            echo "- External-artifact staging: \`${PREPARE_OUTCOME}\`"
-            echo "- Fresh-kernel artifact inference: \`${INFERENCE_OUTCOME}\`"
             echo "- Required outputs: \`${OUTPUT_OUTCOME}\`"
             echo "- Evidence upload: \`${UPLOAD_OUTCOME}\`"
             echo "- Supplemental execution status: **${RELEASE_STATUS}**"
@@ -199,13 +163,9 @@ jobs:
         if: always()
         env:
           E2E_OUTCOME: ${{ steps.e2e.outcome }}
-          PREPARE_OUTCOME: ${{ steps.prepare-inference.outcome }}
-          INFERENCE_OUTCOME: ${{ steps.artifact-inference.outcome }}
           OUTPUT_OUTCOME: ${{ steps.assert-outputs.outcome }}
           UPLOAD_OUTCOME: ${{ steps.upload-evidence.outcome }}
         run: |
           [[ "$E2E_OUTCOME" == "success" ]]
-          [[ "$PREPARE_OUTCOME" == "success" ]]
-          [[ "$INFERENCE_OUTCOME" == "success" ]]
           [[ "$OUTPUT_OUTCOME" == "success" ]]
           [[ "$UPLOAD_OUTCOME" == "success" ]]

@@ -166,10 +166,32 @@ Where this document quotes one of these files' earlier hash as its committed has
 given beside it.
 
 
+## SART7 deviation (2026-10-22)
+
+- **Tag:** `sample-bundle-v1` (asset `language_model_finetuning_adapter_bundle.zip`).
+- **Mutable release:** the GitHub release is not immutable (`gh api repos/kurtvalcorza/language-model-pipeline/releases/tags/sample-bundle-v1 --jq .immutable` returns `false`), so SART7 (SHOULD) is not met.
+- **Pinned digest:** the notebook pins the asset by `SAMPLE_ARTIFACT_SHA256 = "f99348aab5537bbccc26a0283f0fd6e714c0e3b58d27beb8c3d2586951ffaa35"` (`src/lmpipeline/pipeline.py`, carried into the notebook); the GitHub asset digest is the same value.
+- **Integrity:** integrity rests on that pinned SHA-256 check. `fetch_pinned_artifact` and `open_artifact_zip` hash the whole ZIP and refuse it before extraction if the digest differs, so a replaced asset is refused, not used.
+- **Owner acceptance:** the owner accepted this deviation on 2026-10-22. The release is not re-tagged and the pin is not changed.
+
 ## Current status
 
-The migrated notebook (Notebook Specification 3.0, with Section 11) has **no recorded run yet**; its first hosted
-run with the pin is the second pass of §32.2, and until it is recorded the notebook stays Candidate. The previous E2E
+**Current status (2026-10-22): Candidate.** The current E2E notebook blob is `b8df6bc7`
+(`tutorials/language_model_finetuning_colab.ipynb` at `50f07ea`, unchanged on `main` at `5ca28f3`; Notebook Specification
+3.0, with Section 11). Its one recorded hosted run is the `50f07ea` row of the clean-runtime table, evidence in
+`docs/verification/2026-10-22-colab-t4/language_model_finetuning_colab/`: Colab CLI `colab exec -f` (scripted, not a browser
+Run all) on a fresh Colab Tesla T4, default path, exit 0, 15/15 code cells in the executor log, 0 error outputs, 252.1 s, input
+unchanged, verdict PASS. In that run the QLoRA training ran, the fresh reload reproduced the validation loss, and Section 11
+checked the whole-ZIP SHA-256 of `sample-bundle-v1` before extraction (the second pass of §32.2). The notebook stays
+**Candidate** until these are recorded for this blob:
+
+- **REL12:** a BYOD run in which one representative input is accepted through the downstream stages and one incompatible input is refused;
+- **REL2:** a browser run of the interactive journeys (BYOD upload dialog, optional-activity toggle, own-artifact ZIP); the scripted CLI run counts for the default path only;
+- **Optional activity:** a run of the Section 12 decoding activity (`RUN_DECODING_EXPERIMENT = True`); the `50f07ea` run printed that it was off. The owner ruled on 2026-10-22 that it must be run before promotion.
+
+Promotion is an integrator decision; the builder does not change the status.
+
+**History (before the Notebook Specification 3.0 migration; not evidence for `b8df6bc7`, REL14).** The previous E2E
 blob has one recorded one-pass execution at blob `8a2c6ad4886d` (2026-10-07, Colab CLI sequential
 execution on a fresh Colab Tesla T4, default path only; table above). It is **not** a browser Run all, and the
 Section 10 re-run, BYOD (REL12) and the optional activity were not exercised. The companion has one recorded

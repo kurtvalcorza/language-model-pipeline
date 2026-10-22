@@ -1,6 +1,6 @@
 # Release status
 
-Current status: **Candidate — tutorial source complete, awaiting clean-runtime execution**. The shared
+Current status: **Candidate — the current E2E notebook blob `b8df6bc7` (commit `50f07ea`) has one recorded hosted default-path run: Colab CLI scripted execution on a fresh Colab T4, 2026-10-22, PASS, 15/15 code cells, 0 errors. It stays Candidate until a BYOD run (one input accepted, one refused; REL12), a browser run of the interactive journeys (REL2) and a run of the optional decoding activity are recorded (`docs/release-verification.md`, *Current status*)**. The shared
 contract package, the standalone tutorial pipeline module (`src/lmpipeline/pipeline.py`), the offline unit
 suite, the snapshot model card (`weights/smollm2-360m/MODEL_CARD.md`) and the standalone tutorial
 `tutorials/language_model_finetuning_colab.ipynb` (`E2E`, kind `TUTORIAL`, with the Section 11 external-artifact

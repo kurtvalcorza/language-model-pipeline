@@ -653,13 +653,92 @@ def verify_artifact_bundle(bundle_dir: str | Path) -> tuple[dict[str, Any], dict
 
 
 # ---------------------------------------------------------------------------
+# External artifact (NOTEBOOK_SPEC 3.0 §19.1, SART6-SART9) and deterministic export
+# ---------------------------------------------------------------------------
+
+# The trusted sample artifact the tutorial's external-artifact section reads by default: the
+# adapter bundle ZIP that the tutorial's own default path exported in a recorded earlier run
+# (2026-10-07 Colab T4, notebook blob 8a2c6ad4886d at commit d185817; the release notes name the
+# run). The release asset is never overwritten: a changed artifact gets a new tag (SART7).
+SAMPLE_ARTIFACT_TAG = "sample-bundle-v1"
+SAMPLE_ARTIFACT_URL = "https://github.com/kurtvalcorza/language-model-pipeline/releases/download/sample-bundle-v1/language_model_finetuning_adapter_bundle.zip"  # noqa: E501
+SAMPLE_ARTIFACT_SHA256 = "f99348aab5537bbccc26a0283f0fd6e714c0e3b58d27beb8c3d2586951ffaa35"
+SAMPLE_ARTIFACT_BYTES = 22_231_859
+SAMPLE_ARTIFACT_PRODUCER: dict[str, str] = {
+    "notebook": "tutorials/language_model_finetuning_colab.ipynb",
+    "notebook_blob": "8a2c6ad4886d1947f3b2fb8e8e33b3eb7e1317a6",
+    "commit": "d185817b4a45049d51cbfa752737e31bf82b0762",
+    "run": "2026-10-07 Colab CLI 0.7.4 sequential execution, fresh Colab Tesla T4, default path",
+    "evidence": "docs/verification/2026-10-07-colab-t4/language_model_finetuning_colab/",
+    "release": SAMPLE_ARTIFACT_TAG,
+}
+EXTERNAL_ARTIFACT_SIZE_LIMIT = 512 * 1024**2  # bytes an external bundle may expand to
+ZIP_FIXED_DATE_TIME = (1980, 1, 1, 0, 0, 0)  # the earliest ZIP timestamp; no file mtime is stamped
+
+
+def fetch_pinned_artifact(url: str, expected_sha256: str, destination: str | Path, *, timeout: int = 120) -> str:  # noqa: E501
+    """Download (or reuse) the pinned artifact and check its whole-archive SHA-256 BEFORE anything
+    reads its contents. A mismatch deletes the download and raises; nothing is extracted."""
+    import urllib.request
+
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.is_file() and sha256_of_file(destination) == expected_sha256.lower():
+        return expected_sha256.lower()
+    partial = destination.with_name(destination.name + ".part")
+    with urllib.request.urlopen(url, timeout=timeout) as response, open(partial, "wb") as handle:
+        shutil.copyfileobj(response, handle)
+    digest = sha256_of_file(partial)
+    if digest != expected_sha256.lower():
+        partial.unlink(missing_ok=True)
+        raise ValueError(
+            f"Whole-ZIP SHA-256 mismatch for the pinned artifact: expected {expected_sha256}, got {digest}; "  # noqa: E501
+            "nothing was extracted"
+        )
+    partial.replace(destination)
+    return digest
+
+
+def open_artifact_zip(archive_path: str | Path, expected_sha256: str | None, root: str | Path) -> tuple[Path, str]:  # noqa: E501
+    """Check the whole-archive SHA-256 (when one is expected) BEFORE extraction, then extract
+    safely; returns ``(bundle_dir, archive_sha256)``. ``verify_artifact_bundle`` follows."""
+    archive_sha = sha256_of_file(archive_path)
+    if expected_sha256 and archive_sha != expected_sha256.strip().lower():
+        raise ValueError("Whole-ZIP SHA-256 mismatch: this is not the archive you were told to expect; nothing was extracted")  # noqa: E501
+    extraction_root = extract_zip_safely(archive_path, root, size_limit_bytes=EXTERNAL_ARTIFACT_SIZE_LIMIT)  # noqa: E501
+    manifests = list(extraction_root.rglob(ARTIFACT_MANIFEST_NAME))
+    if len(manifests) != 1:
+        raise ValueError(f"Expected exactly one {ARTIFACT_MANIFEST_NAME} in the archive, found {len(manifests)}")  # noqa: E501
+    return manifests[0].parent, archive_sha
+
+
+def deterministic_zip(source_dir: str | Path, zip_path: str | Path) -> str:
+    """Zip every file under ``source_dir`` with sorted member names, a fixed timestamp and mode
+    0644, written atomically. The same files give the same ZIP bytes; returns the ZIP's SHA-256."""
+    source = Path(source_dir)
+    target = Path(zip_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.with_name(target.name + ".part")
+    members = sorted((p.relative_to(source).as_posix(), p) for p in source.rglob("*") if p.is_file())  # noqa: E501
+    with zipfile.ZipFile(partial, "w", zipfile.ZIP_STORED) as archive:
+        for name, path in members:
+            info = zipfile.ZipInfo(name, date_time=ZIP_FIXED_DATE_TIME)
+            info.compress_type = zipfile.ZIP_STORED
+            info.external_attr = (stat.S_IFREG | 0o644) << 16
+            info.create_system = 3
+            archive.writestr(info, path.read_bytes())
+    partial.replace(target)
+    return sha256_of_file(target)
+
+
+# ---------------------------------------------------------------------------
 # Evaluation report (EVAL21)
 # ---------------------------------------------------------------------------
 
 
 FINETUNING_TASK = "language-model supervised fine-tuning (QLoRA adapter)"
 FINETUNING_SCORE_SEMANTICS = "mean cross-entropy per supervised assistant token; perplexity = exp(loss)"  # noqa: E501
-# The ARTIFACT-INFERENCE companion computes no score: it attaches an external adapter and records
+# The external-artifact section computes no score: it attaches an external adapter and records
 # base versus adapted answers for new prompts as qualitative evidence only.
 INFERENCE_TASK = "adapter-attached generation on new prompts with the adapter off and on; no score computed"  # noqa: E501
 INFERENCE_SCORE_SEMANTICS = (
@@ -689,8 +768,8 @@ def evaluation_report(
     verdict is ``sample-sanity``; task quality stays ``not-measurable`` without a held-out task
     set. ``probes`` (base vs adapted answers) are recorded as qualitative evidence only.
 
-    ``task`` and ``score_semantics`` default to the fine-tuning wording; the inference companion
-    passes ``INFERENCE_TASK`` / ``INFERENCE_SCORE_SEMANTICS`` because it computes no score.
+    ``task`` and ``score_semantics`` default to the fine-tuning wording; the external-artifact
+    section passes ``INFERENCE_TASK`` / ``INFERENCE_SCORE_SEMANTICS`` because it computes no score.
     ``baseValidationLoss`` / ``baseValidationPerplexity`` in ``metrics`` (the unadapted base model
     scored on the same validation split) are listed under ``baselines``, as are any explicit
     ``baselines`` entries."""

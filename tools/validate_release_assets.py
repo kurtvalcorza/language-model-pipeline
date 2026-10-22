@@ -1,7 +1,8 @@
 """Static release-asset validation for the language-model (QLoRA adapter) DIMER pipeline.
 
-Checks the two STANDALONE tutorial notebooks (DIMER Notebook Specification 2.2 §4) — the `E2E`
-fine-tuning tutorial and its `ARTIFACT-INFERENCE` companion — the tutorial registry, the snapshot model
+Checks the STANDALONE tutorial notebook (DIMER Notebook Specification 3.0 §4) — the `E2E`
+fine-tuning tutorial, whose Section 11 is the external-artifact section (§19.1) that replaced the retired
+artifact-inference companion — the tutorial registry, the snapshot model
 card, README, STATUS.md and weight documentation for source conformance and cross-document identity
 consistency, and runs the generator parity checks (PAR1–PAR3) for every notebook.
 
@@ -79,6 +80,17 @@ FORBIDDEN_OUTSIDE_MODULE = (
     "userdata.get(",
     "HF_TOKEN",
 )
+# NOTEBOOK_SPEC 3.0 §7.1: the canonical order of the closing stages. Each heading must appear once, in this order,
+# and References closes the notebook.
+SECTION_ORDER = (
+    "## 10. Export the adapter bundle",
+    "## Interpretation and limits",
+    "## Conclusion (your notes)",
+    "## 11. Use an adapter bundle made elsewhere (external artifact)",
+    "## 12. Optional activity",
+    "## Troubleshooting",
+    "## References",
+)
 # One entry per generated notebook: its template module (tools/<template>.py), profile, Colab form
 # gates that must default to the non-interactive path, the machine-readable artifacts it must write
 # (OUT1-OUT3, DAT24, EVAL21), and the profile-specific code / learner-facing markers.
@@ -92,6 +104,10 @@ NOTEBOOKS = {
             "outputs/language_model_finetuning_evaluation_report.json",
             "outputs/language_model_finetuning_result.json",
             "outputs/language_model_finetuning_probes.csv",
+            "EXTERNAL_OUTPUTS / 'input_manifest.json'",
+            "EXTERNAL_OUTPUTS / 'evaluation_report.json'",
+            "EXTERNAL_OUTPUTS / 'result.json'",
+            "EXTERNAL_OUTPUTS / 'generations.csv'",
         ),
         "code_markers": (
             "input_manifest = validate_inputs(SPLITS, MAX_SEQUENCE_LENGTH, token_length=pipe.token_length, names=[f'{data_name}:{name}' for name in SPLITS])",
@@ -125,6 +141,18 @@ NOTEBOOKS = {
             "from datasets import load_dataset",
             "load_dataset(sample['dataset_id'], revision=sample['revision'], split='train')",
             "writer.writerow(['stage', 'prompt', 'base', 'adapted'])",
+            "deterministic_zip(ADAPTER_DIR, ARTIFACT_ZIP)",
+            # NOTEBOOK_SPEC 3.0 §19.1: the external-artifact section (Section 11).
+            "EXTERNAL_OUTPUTS = Path('outputs') / 'external_artifact'",
+            "ARTIFACT_SOURCE = 'Pinned sample artifact'",
+            "fetch_pinned_artifact(SAMPLE_ARTIFACT_URL, SAMPLE_ARTIFACT_SHA256, external_zip)",
+            "open_artifact_zip(external_zip, SAMPLE_ARTIFACT_SHA256, EXTERNAL_WORK / 'bundle')",
+            "external_manifest, external_provenance = verify_artifact_bundle(external_bundle_dir)",
+            "default_sample = SAMPLE_DATASETS['Sample: Filipino SFT']",
+            "external_model = pipe.load_adapter(external_bundle_dir, base_model=pipe.reload_base())",
+            "external_input_manifest = validate_prompts(EXTERNAL_PROMPTS, EXTERNAL_MAX_NEW_TOKENS, token_length=pipe.prompt_token_length, names=external_names)",
+            "with external_model.disable_adapter():",
+            "task=INFERENCE_TASK, score_semantics=INFERENCE_SCORE_SEMANTICS)",
         ),
         "markdown_markers": (
             "**Capability:** supervised QLoRA fine-tuning of the pinned",
@@ -140,59 +168,14 @@ NOTEBOOKS = {
             "`model.disable_adapter()`",
             "full-parameter fine-tuning, preference tuning (RLHF/DPO), merging the adapter",
             "No Hugging Face token is needed for the pinned model",
-        ),
-    },
-    "language_model_artifact_inference_colab.ipynb": {
-        "template": "notebook_template_artifact_inference",
-        "profile": "ARTIFACT-INFERENCE",
-        "byod_gates": ("USE_OWN_ARTIFACT", "RUN_TAMPER_EXERCISE"),
-        "expected_outputs": (
-            "outputs/language_model_artifact_inference_input_manifest.json",
-            "outputs/language_model_artifact_inference_evaluation_report.json",
-            "outputs/language_model_artifact_inference_result.json",
-            "outputs/language_model_artifact_inference_generations.csv",
-        ),
-        "code_markers": (
-            "USE_OWN_ARTIFACT = False",
-            "ARTIFACT_ZIP_PATH = ''",
-            "ARTIFACT_DIR = ''",
-            "EXPECTED_ARTIFACT_ZIP_SHA256 = ''",
-            "SAMPLE_ARTIFACT = {",
-            "raise ValueError('Whole-ZIP SHA-256 mismatch: this is not the archive you were told to expect')",
-            "extraction_root = extract_zip_safely(archive_path, Path('work') / 'external-artifact', size_limit_bytes=512 * 1024**2)",
-            "artifact_manifest, provenance = verify_artifact_bundle(bundle_dir)",
-            "model = pipe.load_adapter(bundle_dir)",
-            "raise RuntimeError('Adapter weights are zero or missing')",
-            "print({'ceilings': {'MAX_NEW_TOKENS_CEILING': MAX_NEW_TOKENS_CEILING, 'MAX_PROMPT_CHARS': MAX_PROMPT_CHARS, 'MAX_SEQUENCE_LENGTH_CEILING': MAX_SEQUENCE_LENGTH_CEILING}, 'decoding_rule': DECODING_RULE})",
-            "input_manifest = validate_prompts(PROMPTS, MAX_NEW_TOKENS, token_length=pipe.prompt_token_length, names=[f'prompt-{i}' for i in range(len(PROMPTS))])",
-            "validate_prompts(['   '], MAX_NEW_TOKENS)",
-            "with model.disable_adapter():",
-            "SAMPLING = {'do_sample': True, 'temperature': 0.7, 'top_p': 0.8, 'top_k': 20}",
-            "report = evaluation_report(None, sample_kind='sample+BYOD' if CUSTOM_PROMPT.strip() else 'sample', probes=rows, task=INFERENCE_TASK, score_semantics=INFERENCE_SCORE_SEMANTICS)",
-            "torch.manual_seed(SEED + attempt)",
-            "'next_token_logit_max_abs_delta'",
-            "'model_revision': MODEL_REVISION",
-            "'model_license': MODEL_LICENSE",
-            "writer.writerow(['prompt', 'kind', 'answer'])",
-        ),
-        "markdown_markers": (
-            "**Capability:** consume an externally supplied PEFT adapter bundle",
-            "produced **outside this execution**",
-            "**no artifact is created here**",
-            "**Trust boundary.**",
-            "before any model state is deserialised",
-            "**no network fallback**",
-            "**greedy decoding**",
-            "its verdict is `not-measurable`",
-            "artifact creation, fine-tuning of any kind, merging the adapter",
-            "`refusing to attach`",
-        ),
-        "forbidden_code": (
-            "export_adapter_bundle(",
-            "prepare_splits(",
-            "get_peft_model(",
-            "optimizer.step(",
-            "load_dataset(",
+            "## 11. Use an adapter bundle made elsewhere (external artifact)",
+            "This run's own export, `outputs/language_model_finetuning_adapter_bundle.zip`, is never read here.",
+            "The reload shows that this run's export survives serialization; this section shows that an adapter made elsewhere can be validated and served here.",
+            "**What this section depends on.** Only the setup cells",
+            "**The trust boundary.**",
+            "**code-adjacent**",
+            "`ARTIFACT_SOURCE` is the location field and defaults to `Pinned sample artifact`",
+            "checked **before extraction**",
         ),
     },
 }
@@ -203,10 +186,11 @@ MODEL_CARD_LINK = "weights/smollm2-360m/MODEL_CARD.md"
 # ---------------------------------------------------------------------------
 # Shared checks. Everything below is source/structure validation only. Passing
 # these checks is NOT clean-runtime execution evidence under DIMER Notebook
-# Specification 2.2; see docs/release-verification.md for the release gate.
+# Specification 3.0; see docs/release-verification.md for the release gate.
 # ---------------------------------------------------------------------------
 
-NOTEBOOK_SPEC = "2.2"
+NOTEBOOK_SPEC = "3.0"
+NOTEBOOK_KIND = "TUTORIAL"
 ALLOWED_PROFILES = {"E2E", "ARTIFACT-INFERENCE", "TASK-INFERENCE", "MULTI-CAPABILITY", "SMOKE"}
 STATUS_TOKENS = ("Candidate", "Release-grade")
 PLACEHOLDER = re.compile(r"\b(TODO|TBD|FIXME)\b|Insert text here|Tooltip:", re.I)
@@ -286,9 +270,8 @@ COMMON_MARKDOWN_MARKERS = (
 # Patterns that must never appear in tutorial code (comment-stripped), in any cell.
 FORBIDDEN_PATTERNS = (
     ("credential in clone URL", re.compile(r"https://[^/'\"\s]*@github\.com/|x-access-token:")),
-    # The one allowed github.com/kurtvalcorza URL in code is the companion's pinned sample-bundle release asset
-    # (Kurt 2026-10-04, LMA-B1): a whole-archive SHA-256-checked download, not a repository dependency.
-    ("repository clone (ST1)", re.compile(r"\bgit\b[^\n]*\bclone\b|github\.com/kurtvalcorza(?!/language-model-pipeline/releases/download/sample-bundle-v\d+/[A-Za-z0-9_.-]+\.zip['\"])")),
+    # github.com/kurtvalcorza references are checked by disallowed_own_references (ST1): only the exact pinned asset URL.
+    ("repository clone (ST1)", re.compile(r"\bgit\b[^\n]*\bclone\b")),
     ("mutable git dependency (MOD14)", re.compile(r"git\+https?://(?![^\n]*@[0-9a-f]{40}\b)")),
     ("editable self-install", re.compile(r"""['"](?:-e|--editable)['"]|pip install (?:-e|--editable)\b""")),
     ("repository package import (ST1)", re.compile(rf"^\s*(?:from|import)\s+{PACKAGE}\b", re.M)),
@@ -308,6 +291,33 @@ FORBIDDEN_OUTSIDE_MODULE_FLEET = (
     "worker_cli(",
     "subprocess.run([",
 )
+
+
+# ST1 / SART6: the only github.com/kurtvalcorza reference allowed anywhere in tutorial code is the exact pinned
+# sample-artifact URL of the external-artifact section, in the carried module cell only (SAMPLE_ARTIFACT_URL in
+# src/lmpipeline/pipeline.py). It is built here from the tag and compared whole: no prefix match, and a reference
+# holding "..", "%2e" (any case), "?" or "#" is refused even before the comparison.
+SAMPLE_ARTIFACT_TAG = "sample-bundle-v1"
+PINNED_SAMPLE_ARTIFACT_URL = f"https://github.com/kurtvalcorza/{REPO_NAME}/releases/download/{SAMPLE_ARTIFACT_TAG}/language_model_finetuning_adapter_bundle.zip"
+PINNED_SAMPLE_ARTIFACT_SHA256 = "f99348aab5537bbccc26a0283f0fd6e714c0e3b58d27beb8c3d2586951ffaa35"
+_OWN_REFERENCE = re.compile(r"github\.com/kurtvalcorza", re.I)
+_REFERENCE_STOP = set(" \t\r\n'\"`<>()[]{},;\\")
+
+
+def disallowed_own_references(text: str, allowed: tuple[str, ...] = ()) -> list[str]:
+    """Every github.com/kurtvalcorza reference in ``text`` that is not exactly one of ``allowed`` (whole token)."""
+    bad = []
+    for match in _OWN_REFERENCE.finditer(text):
+        start, end = match.start(), match.end()
+        while start > 0 and text[start - 1] not in _REFERENCE_STOP:
+            start -= 1
+        while end < len(text) and text[end] not in _REFERENCE_STOP:
+            end += 1
+        reference = text[start:end]
+        traversal = ".." in reference or "%2e" in reference.lower() or "?" in reference or "#" in reference
+        if traversal or reference not in allowed:
+            bad.append(reference)
+    return bad
 
 
 class ValidationError(AssertionError):
@@ -539,6 +549,7 @@ def _validate_notebook_structure(
     _check(profile == spec["profile"], f"{path.name}: profile {profile!r} != declared {spec['profile']!r}")
     version = dimer.get("notebook_spec", dimer.get("notebook_spec_version"))
     _check(version == NOTEBOOK_SPEC, f"{path.name}: metadata.dimer must declare notebook spec version '{NOTEBOOK_SPEC}'")
+    _check(dimer.get("notebook_kind") == NOTEBOOK_KIND, f"{path.name}: metadata.dimer.notebook_kind must be {NOTEBOOK_KIND!r} (NOTEBOOK_SPEC 3.0 KND1)")
     _check(dimer.get("notebook_mode") in ("REFERENCE", "GUIDED", "WORKSHOP"), f"{path.name}: metadata.dimer.notebook_mode must declare a §3.3 pedagogical mode")
     _check(dimer.get("standalone") is True, f"{path.name}: metadata.dimer.standalone must be true (ST6)")
     generated = dimer.get("generated_from")
@@ -716,6 +727,17 @@ def _validate_notebook_content(
     _check(not missing, f"{path.name}: missing required source markers: {missing}")
     present = [label for label, pattern in FORBIDDEN_PATTERNS if pattern.search(code)]
     _check(not present, f"{path.name}: forbidden/insecure source: {present}")
+    # ST1 / SART6: the exact pinned asset URL is allowed in the carried module cell only; nowhere else in code.
+    for index, text in stripped.items():
+        allowed = (PINNED_SAMPLE_ARTIFACT_URL,) if index in embedded else ()
+        bad = disallowed_own_references(text, allowed)
+        _check(not bad, f"{path.name}: cell {index} references this repository on GitHub (ST1): {bad}")
+    module_code = "\n".join(text for index, text in stripped.items() if index in embedded)
+    _check(
+        f'SAMPLE_ARTIFACT_URL = "{PINNED_SAMPLE_ARTIFACT_URL}"' in module_code
+        and f'SAMPLE_ARTIFACT_SHA256 = "{PINNED_SAMPLE_ARTIFACT_SHA256}"' in module_code,
+        f"{path.name}: the carried module must pin SAMPLE_ARTIFACT_URL/SAMPLE_ARTIFACT_SHA256 to {SAMPLE_ARTIFACT_TAG} (SART6)",
+    )
     # The isolated-runtime bootstrap names the token variables only to remove them from the worker environment.
     outside = outside.replace('for name in ("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"):', "")
     leaked = [marker for marker in FORBIDDEN_OUTSIDE_MODULE if marker in outside]
@@ -735,6 +757,16 @@ def _validate_notebook_content(
     missing_md = [marker for marker in COMMON_MARKDOWN_MARKERS + spec["markdown_markers"] if marker not in markdown]
     _check(not missing_md, f"{path.name}: missing learner-facing markers: {missing_md}")
     _check(f"**Profile:** `{spec['profile']}`" in markdown, f"{path.name}: markdown must state the profile")
+    positions = [markdown.find(heading) for heading in SECTION_ORDER]
+    _check(
+        all(pos >= 0 for pos in positions) and positions == sorted(positions)
+        and all(markdown.count(heading) == 1 for heading in SECTION_ORDER),
+        f"{path.name}: sections must appear once each in the NOTEBOOK_SPEC 3.0 §7.1 order {list(SECTION_ORDER)}",
+    )
+    _check(
+        not re.search(r"^#{1,2} ", markdown[positions[-1] + len(SECTION_ORDER[-1]):], re.M),
+        f"{path.name}: References must be the last section",
+    )
     ref = template.get("model_host", {}).get("reference_url", f"https://huggingface.co/{model_id}")
     _check(ref in markdown, f"{path.name}: references must link {ref}")
 

@@ -1,8 +1,9 @@
-"""Static validation for the standalone language-model Colab tutorials (NOTEBOOK_SPEC 2.0 §4).
+"""Static validation for the standalone language-model Colab tutorial (NOTEBOOK_SPEC 3.0 §4).
 
 The carrier-level checks (parity, manifest, pins, forbidden patterns) live in
 tools/validate_release_assets.py; this script keeps the repository's own semantic markers for the
-two notebooks and is what tests/test_colab_tutorials.py drives."""
+E2E notebook, whose Section 11 is the external-artifact section that replaced the retired
+artifact-inference companion, and is what tests/test_colab_tutorials.py drives."""
 
 from __future__ import annotations
 
@@ -15,7 +16,6 @@ ROOT = Path(__file__).resolve().parents[1]
 TUTORIALS = ROOT / "tutorials"
 
 MAIN = TUTORIALS / "language_model_finetuning_colab.ipynb"
-INFERENCE = TUTORIALS / "language_model_artifact_inference_colab.ipynb"
 
 MAIN_MARKERS = (
     "TUTORIAL_REGISTRY",
@@ -43,22 +43,18 @@ MAIN_MARKERS = (
     "evaluation_report(",
 )
 
-INFERENCE_MARKERS = (
+# Section 11, the external-artifact section (NOTEBOOK_SPEC 3.0 §19.1).
+EXTERNAL_ARTIFACT_MARKERS = (
     "EXPECTED_ARTIFACT_ZIP_SHA256",
-    "fetched = stage_missing_files(WEIGHTS_DIR, allow_download=True)",
-    "snapshot = verify_snapshot(WEIGHTS_DIR)",
-    "dimer-base-manifest.json",
-    "dimer_hf_snapshot",
+    "fetch_pinned_artifact(SAMPLE_ARTIFACT_URL, SAMPLE_ARTIFACT_SHA256, external_zip)",
     "safe_member_path",
     "artifact-manifest.json",
     "trustRemoteCode",
-    "trust_remote_code",
     "baseModelRevision",
     "PeftModel.from_pretrained",
     "SHA-256 mismatch",
-    "verify_artifact_bundle(bundle_dir)",
+    "verify_artifact_bundle(external_bundle_dir)",
     "validate_prompts(",
-    "evaluation_report(None",
 )
 
 FORBIDDEN_CODE = (
@@ -224,24 +220,40 @@ def assert_educational_markdown(notebook: dict) -> None:
         )
 
 
-SAMPLE_BUNDLE_ASSET_URL = re.compile(
-    r"https://github\.com/kurtvalcorza/language-model-pipeline/releases/download/sample-bundle-v\d+/[A-Za-z0-9_.-]+\.zip(?=['\"])"
-)
+def _release_validator():
+    """The ST1 rule lives in tools/validate_release_assets.py (exact pinned URL, whole token)."""
+    import importlib.util
+
+    path = ROOT / "tools" / "validate_release_assets.py"
+    spec = importlib.util.spec_from_file_location("_validate_release_assets", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def validate_notebooks() -> None:
     main = load_notebook(MAIN)
-    inference = load_notebook(INFERENCE)
+    release = _release_validator()
 
-    for label, notebook in (("main", main), ("inference", inference)):
+    for label, notebook in (("main", main),):
         assert_clean_notebook(notebook, label=label)
         compile_code_cells(notebook, label=label)
         # The isolated-runtime bootstrap names the token variables only to REMOVE them from the
         # worker's environment (fleet sweep SWP-R); that one statement is not credential handling.
         text = code_text(notebook).replace(ISOLATED_ENV_DROP, "")
-        # The pinned sample-bundle release asset (LMA-B1, digest-checked) is the one allowed
-        # github.com/kurtvalcorza URL: it is a download, not a repository dependency.
-        text = re.sub(SAMPLE_BUNDLE_ASSET_URL, "", text)
+        # ST1: the exact pinned sample-artifact URL is the one allowed github.com/kurtvalcorza
+        # reference, in the carried module cell only; any other reference (or a traversal) fails.
+        for cell in notebook["cells"]:
+            if cell["cell_type"] != "code":
+                continue
+            embedded = bool(cell.get("metadata", {}).get("dimer", {}).get("embedded_module"))
+            source = "".join(cell["source"]) if isinstance(cell["source"], list) else cell["source"]
+            allowed = (release.PINNED_SAMPLE_ARTIFACT_URL,) if embedded else ()
+            bad = release.disallowed_own_references(source, allowed)
+            if bad:
+                raise AssertionError(f"{label}: repository reference (ST1): {bad}")
+            if embedded:
+                text = text.replace(release.PINNED_SAMPLE_ARTIFACT_URL, "")
         for forbidden in FORBIDDEN_CODE:
             if forbidden in text:
                 raise AssertionError(
@@ -249,11 +261,7 @@ def validate_notebooks() -> None:
                 )
 
     assert_markers(code_text(main), MAIN_MARKERS, label="main")
-    assert_markers(
-        code_text(inference),
-        INFERENCE_MARKERS,
-        label="inference",
-    )
+    assert_markers(code_text(main), EXTERNAL_ARTIFACT_MARKERS, label="main (Section 11)")
     assert_colab_param_annotations(main)
     assert_educational_markdown(main)
 

@@ -20,9 +20,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOKS = ['language_model_finetuning_colab', 'language_model_artifact_inference_colab']
+NOTEBOOKS = ['language_model_finetuning_colab']  # the artifact-inference companion is retired (NOTEBOOK_SPEC 3.0 KND11)
 LOCK = ROOT / 'tutorials/requirements-isolated.lock.txt'
-MIN_PREDICT = {'language_model_finetuning_colab': 8, 'language_model_artifact_inference_colab': 5}
+MIN_PREDICT = {'language_model_finetuning_colab': 8}
 
 
 @functools.cache
@@ -192,7 +192,7 @@ def _no_colab(monkeypatch) -> None:
 
 # --- SWP-B: BYOD path, guarded upload, named refusals (fine-tuning notebook) ----------------------------------------
 
-E2E, ART = NOTEBOOKS
+E2E = NOTEBOOKS[0]
 
 
 def _e2e_byod(monkeypatch, tmp_path, path: str = "") -> dict:
@@ -279,38 +279,6 @@ def test_swp_b_bundle_download_falls_back_to_a_path_outside_colab(monkeypatch, t
     _colab(monkeypatch, None)  # the isolated worker's google.colab.files has upload() but no download()
     exec(compile(tail, "<section 10 tail>", "exec"), {"ARTIFACT_ZIP": tmp_path / "bundle.zip"})
     assert str(tmp_path / "bundle.zip") in capsys.readouterr().out
-
-
-def _artifact_cell(monkeypatch, tmp_path, **fields) -> dict:
-    """Execute the companion's Section 4 cell up to (not including) verify_artifact_bundle, with form fields rewritten.
-    Since the 2026-10-02 review fixes (LMA-B1/LMA-m3) the user bundle is the opt-in USE_OWN_ARTIFACT branch."""
-    from lmpipeline.pipeline import extract_zip_safely, sha256_of_file
-
-    source = _cell(_nb(ART), "ARTIFACT_DIR = ''")
-    block = source[: source.index("artifact_manifest, provenance = verify_artifact_bundle")]
-    for name, value in fields.items():
-        line = re.search(rf"^{name} = .*?(  # @param.*)$", block, re.M)
-        assert line, name
-        block = block.replace(line.group(0), f"{name} = {value!r}{line.group(1)}")
-    monkeypatch.chdir(tmp_path)
-    import os
-
-    ns = {"os": os, "Path": Path, "ARTIFACT_MANIFEST_NAME": "artifact-manifest.json", "sha256_of_file": sha256_of_file, "extract_zip_safely": extract_zip_safely}
-    exec(compile(block, "<s4>", "exec"), ns)
-    return ns
-
-
-def test_swp_b_artifact_dir_and_upload_are_guarded(monkeypatch, tmp_path):
-    _no_colab(monkeypatch)
-    with pytest.raises(FileNotFoundError, match="ARTIFACT_DIR .*missing.* is not a folder"):
-        _artifact_cell(monkeypatch, tmp_path, USE_OWN_ARTIFACT=True, ARTIFACT_DIR=str(tmp_path / "missing"))
-    ns = _artifact_cell(monkeypatch, tmp_path, USE_OWN_ARTIFACT=True, ARTIFACT_DIR=str(tmp_path))
-    assert ns["bundle_dir"] == tmp_path and ns["archive_sha"] is None
-    with pytest.raises(RuntimeError, match="ARTIFACT_ZIP_PATH and ARTIFACT_DIR are empty and this runtime has no Colab upload dialog"):
-        _artifact_cell(monkeypatch, tmp_path, USE_OWN_ARTIFACT=True)
-    _colab(monkeypatch, lambda: {})
-    with pytest.raises(ValueError, match="got 0 .*upload cancelled or empty"):
-        _artifact_cell(monkeypatch, tmp_path, USE_OWN_ARTIFACT=True)
 
 
 # --- SWP-F: a re-run never takes a baseline from, or trains on top of, an adapted model ------------------------------

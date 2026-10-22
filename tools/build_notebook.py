@@ -18,6 +18,14 @@ that stage more than one manifest. Single-module templates render as in /1 excep
   (`cellView: form`, Jupyter `source_hidden`) (GDL11).
 - ``guided``: ``{'opening': [markdown cells after the header]}`` for the guided layer's orientation (GDL1–GDL4).
 
+/2.3 adds four opt-in template keys (NOTEBOOK_SPEC 3.0 companion fold, 2026-10-22):
+- ``notebook_spec``: the spec version the notebook declares (header, ``NOTEBOOK_SOURCE``, ``metadata.dimer``);
+  default ``NOTEBOOK_SPEC``.
+- ``notebook_kind``: ``metadata.dimer.notebook_kind`` (NOTEBOOK_SPEC 3.0 §3.7, KND1), e.g. ``TUTORIAL``.
+- ``after_closing``: stage cells (same shape as ``cells``) rendered after ``closing``, so a template can place the
+  external-artifact section and the optional activity after Interpretation and Conclusion (§7.1).
+- ``final``: markdown rendered last (Troubleshooting, Glossary, References).
+
 Usage (from the repository root, or with --repo):
     python tools/build_notebook.py            # write tutorials/<notebook_name>
     python tools/build_notebook.py --check    # exit 1 if the committed notebook differs (PAR3)
@@ -40,7 +48,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-GENERATOR_VERSION = "build_notebook.py/2.2"
+GENERATOR_VERSION = "build_notebook.py/2.3"
 NOTEBOOK_SPEC = "2.2"
 
 # ST2: default rewrite rule; a template may replace it with its own `rewrites` list. Every rule must
@@ -473,6 +481,11 @@ def template_contract() -> dict[str, str]:
         "lock": "OPTIONAL (required with isolated_runtime): repository-relative hash-locked requirements compiled from the pins",
         "infrastructure_labels": "OPTIONAL bool (default False): label the setup, carrier and snapshot sections Infrastructure and collapse their cells (NOTEBOOK_SPEC 2.2 GDL11)",
         "guided": "OPTIONAL {'opening': [markdown cells inserted after the header]} (NOTEBOOK_SPEC 2.2 GDL1-GDL4)",
+        "notebook_spec": "OPTIONAL spec version string the notebook declares (default NOTEBOOK_SPEC)",
+        "github_access": "OPTIONAL sentence replacing 'No GitHub access and no credentials are required' in the External access bullet (e.g. a pinned release-asset download)",
+        "notebook_kind": "OPTIONAL metadata.dimer.notebook_kind, e.g. 'TUTORIAL' (NOTEBOOK_SPEC 3.0 KND1)",
+        "after_closing": "OPTIONAL list of {'md': str, 'code': str} stage cells rendered after `closing` (NOTEBOOK_SPEC 3.0 §7.1: external-artifact section, optional activity)",
+        "final": "OPTIONAL markdown rendered after `after_closing` (Troubleshooting, Glossary, References)",
         "carrier_note": "OPTIONAL markdown appended to the Section 2 intro: which carried functions this notebook actually exercises, so a learner knows what to read and what to skip (NOTEBOOK_SPEC 2.2 GDL11)",
     }
 
@@ -831,6 +844,7 @@ def render(repo: Path, template: dict[str, Any], revision: str | None = None) ->
     ctx = load_context(repo, template, revision)
     mode, run_all, byod = _declarations(template)
     stem = template["stem"]
+    spec_version = template.get("notebook_spec", NOTEBOOK_SPEC)
     fmt = {"stem": stem, **{k: ctx[k] for k in ("MODEL_ID", "MODEL_REVISION", "MODEL_LICENSE", "MODEL_KEY")}}
     cells: list[dict[str, Any]] = []
 
@@ -850,7 +864,7 @@ def render(repo: Path, template: dict[str, Any], revision: str | None = None) ->
         f"# {template['title']}\n\n{badges}\n\n"
         f"**Profile:** `{template['profile']}`  \n"
         f"**Mode:** `{mode}`  \n"
-        f"**Notebook specification:** DIMER Notebook Specification {NOTEBOOK_SPEC} — **standalone** (§4)  \n"
+        f"**Notebook specification:** DIMER Notebook Specification {spec_version} — **standalone** (§4)  \n"
         f"**Capability:** {template['capability']}\n\n"
         f"**This notebook is standalone.** It carries {carried}, the pinned model identity and the per-file SHA-256 manifest in Section 3, "
         f"and the exact runtime pins in Section 1, so it keeps working after export even if the repository changes or disappears. Its only "
@@ -887,7 +901,7 @@ def render(repo: Path, template: dict[str, Any], revision: str | None = None) ->
     )
     prereq = list(template["prerequisites"]) + [
         f"- **External access:** {ctx['host']['name']} only, to fetch the pinned `{ctx['MODEL_ID']}` snapshot (~{total_mb:.0f} MB in total) "
-        f"at revision `{ctx['MODEL_REVISION'][:12]}…`. No GitHub access and no credentials are required; nothing is installed from this repository."
+        f"at revision `{ctx['MODEL_REVISION'][:12]}…`. {template.get('github_access', 'No GitHub access and no credentials are required')}; nothing is installed from this repository."
         + isolated_access
     ]
     add(_md("## Prerequisites\n\n" + "\n".join(prereq)))
@@ -903,7 +917,7 @@ def render(repo: Path, template: dict[str, Any], revision: str | None = None) ->
         f"    'embedded_modules': {ctx['module_rels']!r},\n"
         f"    'module_sha256': {ctx['module_sha256']!r},\n"
         f"    'generator': {GENERATOR_VERSION!r},\n"
-        f"    'notebook_spec': {NOTEBOOK_SPEC!r},\n"
+        f"    'notebook_spec': {spec_version!r},\n"
         "}\n"
     )
     if isolated:
@@ -974,7 +988,7 @@ def render(repo: Path, template: dict[str, Any], revision: str | None = None) ->
                 f"    'embedded_modules': {ctx['module_rels']!r},\n"
                 f"    'module_sha256': {ctx['module_sha256']!r},\n"
                 f"    'generator': {GENERATOR_VERSION!r},\n"
-                f"    'notebook_spec': {NOTEBOOK_SPEC!r},\n"
+                f"    'notebook_spec': {spec_version!r},\n"
                 "}\n"
                 "SKIP_INSTALL = os.environ.get('DIMER_NOTEBOOK_CI_PREINSTALLED') == '1'\n"
                 f"{_INSTALL_GUARD}\n"
@@ -1067,6 +1081,12 @@ def render(repo: Path, template: dict[str, Any], revision: str | None = None) ->
         if stage.get("code"):
             add(_code(stage["code"].format(**fmt)))
     add(_md(template["closing"].format(**fmt)))
+    for stage in template.get("after_closing", []):
+        add(_md(stage["md"].format(**fmt)))
+        if stage.get("code"):
+            add(_code(stage["code"].format(**fmt)))
+    if template.get("final"):
+        add(_md(template["final"].format(**fmt)))
 
     return {
         "cells": cells,
@@ -1074,7 +1094,8 @@ def render(repo: Path, template: dict[str, Any], revision: str | None = None) ->
             "dimer": {
                 "notebook_profile": template["profile"],
                 "notebook_mode": mode,
-                "notebook_spec": NOTEBOOK_SPEC,
+                "notebook_spec": spec_version,
+                **({"notebook_kind": template["notebook_kind"]} if template.get("notebook_kind") else {}),
                 "standalone": True,
                 **({"environment": "isolated hash-locked uv environment; nothing installed into the kernel"} if isolated else {}),
                 "generated_from": {

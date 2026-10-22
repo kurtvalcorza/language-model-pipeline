@@ -1,22 +1,35 @@
 # Release verification
 
-`tutorials/language_model_finetuning_colab.ipynb` (`E2E`) and `tutorials/language_model_artifact_inference_colab.ipynb`
-(`ARTIFACT-INFERENCE`) are **release candidates** until the exact notebook revisions have executed
-top-to-bottom in a clean supported runtime. Unit tests, JSON validation, code-cell compilation, and
-`tools/validate_release_assets.py` are necessary checks but are **not** runtime evidence under DIMER
-Notebook Specification 2.2. This file is the durable release-gate record for both notebooks.
+`tutorials/language_model_finetuning_colab.ipynb` (`E2E`, kind `TUTORIAL`) is a **release candidate** until the
+exact notebook revision has executed top-to-bottom in a clean supported runtime. Unit tests, JSON validation,
+code-cell compilation, and `tools/validate_release_assets.py` are necessary checks but are **not** runtime evidence
+under DIMER Notebook Specification 3.0. This file is the durable release-gate record for the notebook.
+
+**Notebook Specification 3.0 migration (2026-10-22).** The artifact-inference companion
+`tutorials/language_model_artifact_inference_colab.ipynb` (`ARTIFACT-INFERENCE`) is retired (KND11, §32.2); its
+consumer path is now Section 11 of the E2E notebook, the external-artifact section (§19.1). Section 11 reads the
+release asset `sample-bundle-v1` (`language_model_finetuning_adapter_bundle.zip`, 22,231,859 bytes, SHA-256
+`f99348aab5537bbccc26a0283f0fd6e714c0e3b58d27beb8c3d2586951ffaa35`), which is the export of this notebook's
+default path from the recorded 2026-10-07 Colab T4 run at `d185817` / blob `8a2c6ad4886d` (table below), so the
+existing pin meets SART8–SART10 and is kept (§32.2 item 3); no new release was made. The companion's executions
+below stay as history (REL14) and are not evidence for the migrated notebook. From the migration on, Section 10
+writes the bundle ZIP deterministically (sorted members, fixed timestamp and mode), so identical bundle files give
+identical ZIP bytes. LoRA training on a T4 is not bit-reproducible, so a new run's bundle files, and therefore its
+ZIP digest, will differ from the pinned asset; the pin is not expected to be reproduced by a re-export.
 
 ## Automatic coverage (static, every pull request)
 
 CI runs `tools/validate_release_assets.py`, which checks:
 
-- both notebooks parse; every code cell compiles as plain Python (no `%`/`!` magics); no persisted outputs
+- the notebook parses; every code cell compiles as plain Python (no `%`/`!` magics); no persisted outputs
   or execution counts; no unresolved placeholder markers; every code cell is preceded by an explanatory
   markdown cell;
-- exactly the two tutorial notebooks, named in `tutorials/README.md` with their profiles, the notebook-spec
-  version and the standalone carrier; `metadata.dimer` declares the profile, spec `2.2`, `standalone: true`
+- exactly one tutorial notebook, named in `tutorials/README.md` with its profile, the notebook-spec
+  version and the standalone carrier; `metadata.dimer` declares the profile, spec `3.0`, kind `TUTORIAL`, `standalone: true`
   and `generated_from` (repository, generating commit, module SHA-256, generator);
-- the standalone carrier (ST1–ST6, PAR1–PAR3) for each notebook: no clone, repository install or repository
+- the §7.1 section order (Export and fresh reload → Interpretation → Conclusion → Section 11 external artifact → Section 12 optional activity → Troubleshooting → References) and the Section 11 markers (pinned digest before extraction, `verify_artifact_bundle`, the data-contract check, `outputs/external_artifact/`, the trust-boundary statements);
+- ST1: the only `github.com/kurtvalcorza` reference allowed in code is the exact pinned sample-artifact URL, compared as a whole token, in the carried module cell; a reference holding `..`, `%2e`, `?` or `#` is refused;
+- the standalone carrier (ST1–ST6, PAR1–PAR3): no clone, repository install or repository
   import on the primary path; exactly one cell tagged `embedded_module` equal to `src/lmpipeline/pipeline.py`
   after the generator's documented rewrite; the inline `MANIFEST` equal to
   `weights/smollm2-360m/dimer-base-manifest.json` and the inline `PINS` equal to the `pyproject.toml` runtime
@@ -46,9 +59,8 @@ CI runs `tools/validate_release_assets.py`, which checks:
 - `weights/smollm2-360m/MODEL_CARD.md` front matter (spec 1.1, `base_model`), single H1, required heading
   order, and the `## Packaged Snapshot Details` provenance section.
 
-CI also installs the light development pins (no torch), runs `ruff`, `tools/build_notebook.py --check` for
-both templates, the offline unit suite (`tests/test_snapshot_helpers.py`, `tests/test_role_helpers.py`,
-`tests/test_notebook_parity.py`, `tests/test_companion_parity.py`, `tests/test_colab_tutorials.py`; fake
+CI also installs the light development pins (no torch), runs `ruff`, `tools/build_notebook.py --check`, the offline unit suite (`tests/test_snapshot_helpers.py`, `tests/test_role_helpers.py`,
+`tests/test_notebook_parity.py`, `tests/test_external_artifact_section.py`, `tests/test_colab_tutorials.py`; fake
 tokenizer, injected downloader, no weights) and the repository's contract suite. These are source/provenance
 and unit checks. They are **not** execution evidence.
 
@@ -102,20 +114,21 @@ Before changing the registry status from `Candidate` to `Release-grade`:
      (record both numbers and the verdict; `NOT reproduced` is a finding, not a pass); `outputs/language_model_finetuning_result.json`,
      `outputs/language_model_finetuning_probes.csv` and `outputs/language_model_finetuning_adapter_bundle.zip`
      written with `NOTEBOOK_SOURCE`, model revision, model licence, runtime versions and device;
-6. open the exact companion notebook revision in a **separate** clean runtime. Default path: leave every field
-   alone; Section 4 reads the trusted sample bundle pinned in `SAMPLE_ARTIFACT` (until that slot is filled,
-   Run all stops there with the message naming it — record that as the outcome). Own-bundle path: set
-   `USE_OWN_ARTIFACT = True` and `ARTIFACT_ZIP_PATH` to the ZIP from step 5 (Kaggle executor), or use the
-   upload dialog (Colab), with `EXPECTED_ARTIFACT_ZIP_SHA256` set to the step-5 digest. Verify: whole-ZIP digest
-   checked before extraction, bundle verified before load; adapter attached with the printed `lora_b_max_abs`;
-   `validate_prompts` writes the input manifest with the blank-prompt finding; the adapter-activity readout
-   (`next_token_logit_max_abs_delta`, `answers_differ`, verdict `active`); two seeded sampled answers;
-   `evaluation_report` verdict `not-measurable` with `sample_kind: sample`; result JSON and generations CSV written;
+6. verify Section 11, the external-artifact section, on the default path (same run): it prints the pinned URL,
+   SHA-256 and producer of `sample-bundle-v1` before downloading; the whole-ZIP digest is checked before
+   extraction; `verify_artifact_bundle` passes and the bundle's base model and revision equal the pinned ones; the
+   data-contract check passes (the bundle names the default `Sample: Filipino SFT` dataset and revision); the
+   adapter is attached to a fresh base with the printed `lora_b_max_abs`; `validate_prompts` writes the input
+   manifest with the blank-prompt finding; greedy answers with the adapter off and on and `answers_differ`;
+   `evaluation_report` verdict `not-measurable`; `input_manifest.json`, `evaluation_report.json`, `result.json` and
+   `generations.csv` under `outputs/external_artifact/`; this run's own bundle ZIP is never read. Optional
+   own-bundle path, in a separate session: `ARTIFACT_SOURCE = 'Your own bundle ZIP'`, `ARTIFACT_ZIP_PATH` set to the
+   step-5 ZIP and `EXPECTED_ARTIFACT_ZIP_SHA256` to its printed digest;
 7. verify the exports exist and the interpretation sections match the observed path;
 8. record the notebook Git blob ids, commit, runtime (platform, Python, PyTorch, transformers, peft, GPU),
    model identifier and immutable revision, whether the model cache was clean, **whether a kernel restart or a
    `google.colab` shim was needed** (either one disqualifies the run as Run-all evidence), the sample-artifact
-   SHA-256 for the companion, outcome, produced outputs, and any warning or applicable `SHOULD` deviation in
+   SHA-256 Section 11 checked, outcome, produced outputs, and any warning or applicable `SHOULD` deviation in
    the table below;
 9. record no access tokens or other secrets.
 
@@ -138,7 +151,9 @@ runtime, not general estimates.
 
 ## Current status
 
-The E2E notebook has one recorded one-pass execution at blob `8a2c6ad4886d` (2026-10-07, Colab CLI sequential
+The migrated notebook (Notebook Specification 3.0, with Section 11) has **no recorded run yet**; its first hosted
+run with the pin is the second pass of §32.2, and until it is recorded the notebook stays Candidate. The previous E2E
+blob has one recorded one-pass execution at blob `8a2c6ad4886d` (2026-10-07, Colab CLI sequential
 execution on a fresh Colab Tesla T4, default path only; table above). It is **not** a browser Run all, and the
 Section 10 re-run, BYOD (REL12) and the optional activity were not exercised. The companion has one recorded
 one-pass default-path execution at blob `f3be29a5d95b` (2026-10-07, same executor, on the pinned sample bundle;

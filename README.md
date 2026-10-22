@@ -70,9 +70,13 @@ tutorials pin one base model; the other registry entries are exercised by the DI
 
 ## Release status
 
-**Candidate.** Static/unit checks do not constitute clean-runtime notebook evidence. The clean-runtime
-runs of the two standalone tutorials are pending; complete `docs/release-verification.md` against the
-exact release revision before calling either notebook release-grade.
+**Candidate.** Static/unit checks do not constitute clean-runtime notebook evidence. The standalone
+tutorial (the artifact-inference companion is retired and folded into its Section 11) has one hosted run
+of its current blob `b8df6bc7` (commit `50f07ea`): a Colab CLI scripted run on a fresh T4 on 2026-10-22
+that passed (15/15 code cells, 0 errors). It stays Candidate until a BYOD run (one input accepted, one
+refused), a browser run of the interactive journeys and a run of the optional activity are recorded;
+complete `docs/release-verification.md` against the exact release revision before calling the notebook
+release-grade.
 
 ## Model selection
 

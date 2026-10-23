@@ -20,6 +20,7 @@ import re
 import shutil
 import sys
 import types
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -28,12 +29,14 @@ from lmpipeline.pipeline import (
     BASELINE_METRIC_IDS,
     INFERENCE_SCORE_SEMANTICS,
     INFERENCE_TASK,
+    Refused,
     canonical,
     evaluation_report,
     extract_zip_safely,
     fingerprint,
     manufacture_validation,
     perplexity,
+    validate_inputs,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -246,6 +249,8 @@ def _byod(monkeypatch, tmp_path, path: str) -> dict:
     ns = {
         "USE_BYOD": True, "BYOD_PATH": path, "WORK_DIR": work, "Path": Path, "shutil": shutil, "json": json,
         "canonical": canonical, "extract_zip_safely": extract_zip_safely, "manufacture_validation": manufacture_validation, "fingerprint": fingerprint,
+        "Refused": Refused, "zipfile": zipfile, "validate_inputs": validate_inputs, "MAX_SEQUENCE_LENGTH": 512,
+        "pipe": types.SimpleNamespace(token_length=lambda record: 8),  # Section 4 now runs Section 5's checks on BYOD
     }
     exec(compile(block, "<byod>", "exec"), ns)
     return ns
@@ -271,7 +276,7 @@ def test_lmf_m4_a_malformed_line_is_named_with_its_file_and_line(monkeypatch, tm
     folder.mkdir()
     good = '{"prompt": "a", "completion": "b"}'
     (folder / "train.jsonl").write_text("\n".join([good] * 4 + ['{"prompt": "a", completion: "b"}']) + "\n", encoding="utf-8")
-    with pytest.raises(ValueError, match=r"train\.jsonl line 5: not a messages"):
+    with pytest.raises(Refused, match=r"^bad: train\.jsonl line 5: not a messages"):
         _byod(monkeypatch, tmp_path, str(folder))
 
 

@@ -15,9 +15,12 @@ import json
 import re
 import sys
 import types
+import zipfile
 from pathlib import Path
 
 import pytest
+
+from lmpipeline.pipeline import Refused
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOKS = ['language_model_finetuning_colab']  # the artifact-inference companion is retired (NOTEBOOK_SPEC 3.0 KND11)
@@ -201,6 +204,7 @@ def _e2e_byod(monkeypatch, tmp_path, path: str = "") -> dict:
         extract_zip_safely,
         fingerprint,
         manufacture_validation,
+        validate_inputs,
     )
 
     source = _cell(_nb(E2E), "BYOD_PATH = ''")
@@ -215,6 +219,8 @@ def _e2e_byod(monkeypatch, tmp_path, path: str = "") -> dict:
         "USE_BYOD": True, "BYOD_PATH": path, "WORK_DIR": work, "Path": Path, "shutil": shutil, "json": json,
         "canonical": canonical, "extract_zip_safely": extract_zip_safely, "manufacture_validation": manufacture_validation,
         "fingerprint": fingerprint,
+        "Refused": Refused, "zipfile": zipfile, "validate_inputs": validate_inputs, "MAX_SEQUENCE_LENGTH": 512,
+        "pipe": types.SimpleNamespace(token_length=lambda record: 8),  # Section 4 now runs Section 5's checks on BYOD
     }
     exec(compile(block, "<section 4 BYOD>", "exec"), namespace)
     return namespace
@@ -229,7 +235,7 @@ def test_swp_b_byod_path_folder_and_zip_work_outside_colab(monkeypatch, tmp_path
     folder = tmp_path / "mine"
     folder.mkdir()
     (folder / "train.jsonl").write_text(_rows(10), encoding="utf-8")
-    (folder / "test.jsonl").write_text(_rows(2), encoding="utf-8")
+    (folder / "test.jsonl").write_text(_rows(2).replace("q", "t"), encoding="utf-8")  # distinct rows: a leaked row is refused
     ns = _e2e_byod(monkeypatch, tmp_path, str(folder))
     assert sorted(ns["SPLITS"]) == ["test", "train", "validation"] and ns["sample_kind"] == "BYOD"
     assert len(ns["SPLITS"]["train"]) + len(ns["SPLITS"]["validation"]) == 10
@@ -245,25 +251,25 @@ def test_swp_b_byod_path_folder_and_zip_work_outside_colab(monkeypatch, tmp_path
 
 def test_swp_b_byod_refusals_name_the_file_line_and_rule(monkeypatch, tmp_path):
     _no_colab(monkeypatch)
-    with pytest.raises(RuntimeError, match="BYOD_PATH is empty and this runtime has no Colab upload dialog"):
+    with pytest.raises(Refused, match="BYOD_PATH is empty and this runtime has no Colab upload dialog"):
         _e2e_byod(monkeypatch, tmp_path)
-    with pytest.raises(FileNotFoundError, match="is neither a folder nor a .zip file"):
+    with pytest.raises(Refused, match="^nope.txt: .*is neither a folder nor a .zip file"):
         _e2e_byod(monkeypatch, tmp_path, str(tmp_path / "nope.txt"))
     folder = tmp_path / "bad"
     folder.mkdir()
     (folder / "train.jsonl").write_text(_rows(3) + '{"foo": 1}\n', encoding="utf-8")
-    with pytest.raises(ValueError, match=r"train\.jsonl line 4: not a messages"):
+    with pytest.raises(Refused, match=r"^bad: train\.jsonl line 4: not a messages"):
         _e2e_byod(monkeypatch, tmp_path, str(folder))
     empty = tmp_path / "empty"
     empty.mkdir()
     (empty / "notes.jsonl").write_text(_rows(2), encoding="utf-8")
-    with pytest.raises(ValueError, match="BYOD requires train.jsonl"):
+    with pytest.raises(Refused, match="^empty: BYOD requires train.jsonl"):
         _e2e_byod(monkeypatch, tmp_path, str(empty))
 
 
 def test_swp_b_cancelled_upload_is_explained(monkeypatch, tmp_path):
     _colab(monkeypatch, lambda: {})
-    with pytest.raises(RuntimeError, match="upload was cancelled or empty"):
+    with pytest.raises(Refused, match=r"^\(no file\): The upload was cancelled or empty"):
         _e2e_byod(monkeypatch, tmp_path)
     _colab(monkeypatch, lambda: {"train.jsonl": _rows(10).encode()})
     ns = _e2e_byod(monkeypatch, tmp_path)

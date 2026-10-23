@@ -84,6 +84,27 @@ SAMPLE_DATASETS: dict[str, dict[str, str]] = {
 # ---------------------------------------------------------------------------
 
 
+class Refused(Exception):
+    """A user input this notebook will not use (DAT19/DAT20): an upload, a path, a form
+    setting or an adapter bundle.
+
+    IPython renders an exception through ``_render_traceback_`` when it defines one, so the
+    cell shows only the line ``Refused: <file name>: <reason and how to fix it>`` and no
+    traceback; it is still an exception, so Run all stops at that cell. ``dimer_refusal``
+    lets the isolated-environment worker send that line back instead of a traceback. Genuine
+    failures (a bug, a failed download, a pinned digest mismatch) keep their own exceptions.
+    """
+
+    dimer_refusal = True
+
+    def __init__(self, name: str, reason: str) -> None:
+        super().__init__(f"{name}: {reason}")
+        self.name, self.reason = str(name), str(reason)
+
+    def _render_traceback_(self) -> list[str]:
+        return [f"Refused: {self}"]
+
+
 def sha256_of_file(path: str | Path) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as fh:

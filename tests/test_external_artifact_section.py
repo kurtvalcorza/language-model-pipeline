@@ -288,8 +288,9 @@ def test_a_user_zip_with_the_wrong_expected_digest_is_refused_before_extraction(
     archive = _standin_zip(tmp_path)
     work = tmp_path / "user"
     work.mkdir()
-    with pytest.raises(ValueError, match="Whole-ZIP SHA-256 mismatch"):
+    with pytest.raises(Exception, match="^standin.zip: Whole-ZIP SHA-256 mismatch") as caught:
         _run_section(monkeypatch, work, archive, fields={"ARTIFACT_SOURCE": "Your own bundle ZIP", "ARTIFACT_ZIP_PATH": str(archive), "EXPECTED_ARTIFACT_ZIP_SHA256": "1" * 64})
+    assert type(caught.value).__name__ == "Refused"  # a refused user input (DAT20), shown as one line
     assert not (work / "work" / "external_artifact" / "bundle").exists()
     ns, _ = _run_section(monkeypatch, work, archive, fields={"ARTIFACT_SOURCE": "Your own bundle ZIP", "ARTIFACT_ZIP_PATH": str(archive), "EXPECTED_ARTIFACT_ZIP_SHA256": sha256_of_file(archive)})
     assert ns["external_zip_sha256"] == sha256_of_file(archive)
@@ -316,13 +317,13 @@ def test_user_branches_are_guarded(monkeypatch, tmp_path):
     archive = _standin_zip(tmp_path)
     work = tmp_path / "run"
     work.mkdir()
-    with pytest.raises(ValueError, match="a folder has no archive to check"):
+    with pytest.raises(Exception, match="^EXPECTED_ARTIFACT_ZIP_SHA256: it is set but a folder has no archive to check"):
         _run_section(monkeypatch, work, archive, fields={"ARTIFACT_SOURCE": "Your own bundle folder", "ARTIFACT_DIR": str(tmp_path / "standin-bundle"), "EXPECTED_ARTIFACT_ZIP_SHA256": "a" * 64})
-    with pytest.raises(FileNotFoundError, match="is not a folder"):
+    with pytest.raises(Exception, match="^missing: ARTIFACT_DIR .* is not a folder"):
         _run_section(monkeypatch, work, archive, fields={"ARTIFACT_SOURCE": "Your own bundle folder", "ARTIFACT_DIR": str(tmp_path / "missing")})
-    with pytest.raises(FileNotFoundError, match="is not a file"):
+    with pytest.raises(Exception, match="is not a file"):
         _run_section(monkeypatch, work, archive, fields={"ARTIFACT_SOURCE": "Your own bundle ZIP"})
-    with pytest.raises(RuntimeError, match="no Colab upload dialog"):
+    with pytest.raises(Exception, match=r"^\(no file\): This runtime has no Colab upload dialog"):
         _run_section(monkeypatch, work, archive, fields={"ARTIFACT_SOURCE": "Upload a bundle ZIP (Colab)"})
     ns, out = _run_section(monkeypatch, work, archive, fields={"ARTIFACT_SOURCE": "Your own bundle folder", "ARTIFACT_DIR": str(tmp_path / "standin-bundle")})
     assert ns["external_zip_sha256"] is None and "has no archive" in out

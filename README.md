@@ -70,7 +70,7 @@ tutorials pin one base model; the other registry entries are exercised by the DI
 
 ## Release status
 
-**Candidate.** Static/unit checks do not constitute clean-runtime notebook evidence. The standalone
+**Candidate.** The 2026-10-23 refusal-display fix (branch `fix/refusal-display`, NOTEBOOK_SPEC 3.0 DAT19/DAT20: a refused user input is shown as one `Refused: <file name>: <rule>` line with no traceback, and the run stops at that cell) changed the notebook blob from `b8df6bc7` to `4651e699`, so under REL14 the `50f07ea` default-path run and the `edcb9e3` decoding-activity run are history for blob `b8df6bc7`, not evidence for `4651e699`; new hosted runs of `4651e699` (the default path, the optional activity, the REL12 BYOD review and the REL2 browser run) are pending and will be recorded in `docs/release-verification.md`. Static/unit checks do not constitute clean-runtime notebook evidence. The standalone
 tutorial (the artifact-inference companion is retired and folded into its Section 11) has one hosted run
 of its current blob `b8df6bc7` (commit `50f07ea`): a Colab CLI scripted run on a fresh T4 on 2026-10-22
 that passed (15/15 code cells, 0 errors), and one hosted run of the optional decoding activity on the same

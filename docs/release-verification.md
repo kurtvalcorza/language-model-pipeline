@@ -186,7 +186,7 @@ given beside it.
 
 ## Current status
 
-**Current status (2026-10-22): Candidate.** The current E2E notebook blob is `b8df6bc7`
+The 2026-10-23 refusal-display fix (branch `fix/refusal-display`, NOTEBOOK_SPEC 3.0 DAT19/DAT20: a refused user input is shown as one `Refused: <file name>: <rule>` line with no traceback, and the run stops at that cell) changed the notebook blob from `b8df6bc7` to `4651e699`, so under REL14 the `50f07ea` default-path run and the `edcb9e3` decoding-activity run are history for blob `b8df6bc7`, not evidence for `4651e699`; new hosted runs of `4651e699` (the default path, the optional activity, the REL12 BYOD review and the REL2 browser run) are pending and will be recorded in `docs/release-verification.md`. **Current status (2026-10-22): Candidate.** The current E2E notebook blob is `b8df6bc7`
 (`tutorials/language_model_finetuning_colab.ipynb` at `50f07ea`, unchanged on `main` at `5ca28f3`; Notebook Specification
 3.0, with Section 11). Its one recorded hosted run is the `50f07ea` row of the clean-runtime table, evidence in
 `docs/verification/2026-10-22-colab-t4/language_model_finetuning_colab/`: Colab CLI `colab exec -f` (scripted, not a browser

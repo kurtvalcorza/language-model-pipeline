@@ -202,7 +202,7 @@ given beside it.
 
 **Tier C wording revision (2026-10-25, branch `fix/language-model-tier-c-2026-10-25`, code commit `bc6c04e`).** Markdown, header and metadata only for `tutorials/language_model_finetuning_colab.ipynb`: pretraining-overlap statement (DAT9), run-labelled numbers (REL13), use notice, IEEE references and the environment-variable notes. The regenerated notebook blob `d88be9f90a1c2c3805bac88ddc502b23e2297e85` is **Candidate** and its hosted runs are **pending** (REL14); the 2026-10-23 runs of `6c22e80` are evidence for blob `4651e699` only.
 
-**Current status (2026-10-23): Candidate.** The current E2E notebook blob is `4651e699`
+**Current status (2026-10-23): Candidate.** The E2E notebook blob before the tier C revision is `4651e699`
 (`tutorials/language_model_finetuning_colab.ipynb` at `6c22e80` on branch `fix/refusal-display`, PR #83; Notebook Specification 3.0,
 with Section 11), produced by the 2026-10-23 refusal-display fix (branch `fix/refusal-display`, PR #83; NOTEBOOK_SPEC 3.0 DAT19/DAT20: a refused user input is shown as one `Refused: <file name>: <rule>` line with no traceback, and the run stops at that cell). It has two recorded hosted runs, the two `6c22e80`
 rows of the clean-runtime table, both Colab CLI `colab exec -f` (scripted, not a browser Run all) on a fresh Colab Tesla T4,

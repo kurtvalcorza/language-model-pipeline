@@ -344,6 +344,19 @@ def test_tier_c_section_8_comparison_quotes_every_recorded_colab_t4_run():
     # and keeps the Kaggle T4 figures labelled as that earlier run.
     markdown = _markdown(E2E)
     assert "For comparison only: the recorded Kaggle T4 run" not in markdown
-    for quoted in ("seven recorded Colab T4 runs", "train loss 3.2646–3.2657", "validation loss 3.2604–3.2640",
-                   "perplexity 26.1–26.2", "about 52 to 56 s of training"):
+    for quoted in ("nine recorded Colab T4 runs", "train loss 3.2646–3.2665", "validation loss 3.2604–3.2640",
+                   "perplexity 26.1–26.2", "51.9–55.8 s of training"):
         assert quoted in markdown, quoted
+
+
+def test_historical_wording_records_runs_and_drops_expectations():
+    # Historical wording (2026-10-26): run-derived numbers are records of named runs, never expectations, and the
+    # notebook carries no run-status sentence. Fails on PR #84 head 03b8e1e.
+    markdown = _markdown(E2E)
+    for stale in ("hosted runs of this revision are pending", "seven recorded Colab T4 runs", "3.2646–3.2657",
+                  "about 52 to 56 s", "Your numbers will differ somewhat", "expect the adapted answers to follow",
+                  "showed exactly that pattern"):
+        assert stale not in markdown, stale
+    for record in ("revisions `d185817`, `50f07ea`, `edcb9e3`, `6c22e80`, `4f3a907` and `c745a70`",
+                   "These are records of those runs, not targets", "this can vary between runs"):
+        assert record in markdown, record

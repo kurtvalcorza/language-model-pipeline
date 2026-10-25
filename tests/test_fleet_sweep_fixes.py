@@ -335,6 +335,7 @@ def test_swp_g_checkpoints_invent_no_numbers_for_an_unrecorded_run():
     for name in NOTEBOOKS:
         markdown = "\n".join(c["source"] for c in _nb(name)["cells"] if c["cell_type"] == "markdown")
         assert "No passing clean-run record exists yet" not in markdown
-        assert "hosted runs of this revision are pending" in markdown and "revision `6c22e80`" in markdown
+        # Historical wording (2026-10-26): run status lives in docs/release-verification.md, not in the notebook.
+        assert "hosted runs of this revision are pending" not in markdown and "revision `6c22e80`" in markdown
         answers = re.findall(r"<details><summary>Check your reasoning</summary>(.*?)</details>", markdown, re.S)
         assert answers and not any(re.search(r"loss (?:of |≈ ?|= ?)\d", a) for a in answers)

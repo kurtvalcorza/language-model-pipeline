@@ -558,8 +558,8 @@ TEMPLATE = {
                 "**What to notice:** compare each BASE/ADAPTED pair on language, length and whether it stops cleanly; a "
                 "repeated phrase is a greedy-decoding loop, not a training bug.\n\n"
                 "<details><summary>Check your reasoning</summary>\n\n"
-                "Often, but not always: about a hundred training rows shift the *style* of answers, so expect some prompts to "
-                "change register or language and others to look much like the base. Neither column is scored; this is "
+                "Read the BASE/ADAPTED pairs printed above; there is no single right answer. About a hundred training rows "
+                "can shift the *style* of an answer (its register or language) without changing every prompt. Neither column is scored; this is "
                 "qualitative evidence.\n\n"
                 "</details>"
             ),
@@ -989,9 +989,9 @@ TEMPLATE = {
                 "**Predict:** which answer is most likely to loop? Will the two sampled answers be identical? Will changing `SEED` "
                 "change the greedy answer?\n\n"
                 "<details><summary>Check your reasoning</summary>\n\n"
-                "The greedy answer, if any: it always takes the most likely token, so once a phrase becomes the most likely "
-                "continuation of itself it repeats. The sampled answers usually differ from each other (two draws can coincide, "
-                "but rarely over 96 tokens) and loop less. Changing `SEED` changes the sampled answers only; the greedy answer "
+                "Any of the three can loop; compare the counts printed above. Greedy decoding always takes the most likely token, "
+                "so once a phrase becomes the most likely continuation of itself it repeats, and a sampled answer can loop as "
+                "much or more. The two sampled answers can coincide, but rarely over 96 tokens. Changing `SEED` changes the sampled answers only; the greedy answer "
                 "depends on the weights, not the seed.\n\n"
                 "</details>"
             ),

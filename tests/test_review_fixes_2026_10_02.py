@@ -337,3 +337,13 @@ def test_worker_colab_stubs_have_specs(name: str, real_google: bool, monkeypatch
         for n in names:
             sys.modules.pop(n, None)
         sys.modules.update(saved)
+
+
+def test_tier_c_section_8_comparison_quotes_every_recorded_colab_t4_run():
+    # Tier C prose-mismatch fix (2026-10-25): the comparison note gives the range over the seven Colab T4 runs,
+    # and keeps the Kaggle T4 figures labelled as that earlier run.
+    markdown = _markdown(E2E)
+    assert "For comparison only: the recorded Kaggle T4 run" not in markdown
+    for quoted in ("seven recorded Colab T4 runs", "train loss 3.2646–3.2657", "validation loss 3.2604–3.2640",
+                   "perplexity 26.1–26.2", "about 52 to 56 s of training"):
+        assert quoted in markdown, quoted

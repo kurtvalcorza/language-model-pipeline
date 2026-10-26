@@ -330,9 +330,12 @@ def test_swp_f_baseline_and_training_cells_start_from_the_frozen_base():
 
 
 def test_swp_g_checkpoints_invent_no_numbers_for_an_unrecorded_run():
-    """No passing clean-run record exists, so the worked answers must say so and quote no loss values."""
+    """The worked answers name the recorded runs and quote no loss values. Tier C (2026-10-25): passing hosted runs of
+    earlier revisions are now recorded, so the stale "no passing clean-run record" sentence must be gone."""
     for name in NOTEBOOKS:
         markdown = "\n".join(c["source"] for c in _nb(name)["cells"] if c["cell_type"] == "markdown")
-        assert "No passing clean-run record exists yet for this notebook" in markdown
+        assert "No passing clean-run record exists yet" not in markdown
+        # Historical wording (2026-10-26): run status lives in docs/release-verification.md, not in the notebook.
+        assert "hosted runs of this revision are pending" not in markdown and "revision `6c22e80`" in markdown
         answers = re.findall(r"<details><summary>Check your reasoning</summary>(.*?)</details>", markdown, re.S)
         assert answers and not any(re.search(r"loss (?:of |≈ ?|= ?)\d", a) for a in answers)

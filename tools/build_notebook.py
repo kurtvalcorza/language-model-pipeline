@@ -876,6 +876,7 @@ def render(repo: Path, template: dict[str, Any], revision: str | None = None) ->
     )
     header = (
         f"# {template['title']}\n\n{badges}\n\n"
+        '> **⚠️ Notice.** For research, training and evaluation only. Not validated for production,\n> clinical, diagnostic or safety-critical use. Running this notebook downloads third-party\n> model weights and datasets under their own licenses (see the model card) and uses compute\n> on your own Colab or Kaggle account. Data you bring stays in your runtime, and you are\n> responsible for having the right to use it. Results here are tutorial evidence, not\n> benchmarks. Everything is provided "as is", without warranty of any kind. To the maximum\n> extent permitted by law, the maintainers and the DIMER platform accept no liability for\n> its use.\n\n'
         f"**Profile:** `{template['profile']}`  \n"
         f"**Mode:** `{mode}`  \n"
         f"**Notebook specification:** DIMER Notebook Specification {spec_version} — **standalone** (§4)  \n"
@@ -950,7 +951,10 @@ def render(repo: Path, template: dict[str, Any], revision: str | None = None) ->
                 "pins in the cell) with `--require-hashes --only-binary :all:`, so every package, direct or transitive, is the exact "
                 "file that was locked. No repository code is installed. The lock holds manylinux x86_64 wheels, so the notebook "
                 "supports **Linux x86_64 runtimes only** (Google Colab, Kaggle or Linux Jupyter); on any other platform the cell "
-                "stops with that message.\n\n"
+                "stops with that message. The environment directory defaults to `dimer_isolated_env_<lock digest>` in the "
+                "working directory; set the `DIMER_ISOLATED_ENV` environment variable before this cell to put it elsewhere. The "
+                "carried pipeline prepends the environment's CUDA library folders to `LD_LIBRARY_PATH` itself; there is nothing "
+                "to set.\n\n"
                 "The same cell then starts one Python process in that environment and routes **every later code cell** to it. "
                 "Printed output comes back to the notebook as usual, variables persist from cell to cell, and an error stops "
                 "**Run all** as it would in the kernel. It is the only cell that runs in the kernel (it is marked "

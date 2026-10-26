@@ -265,7 +265,7 @@ COMMON_MARKDOWN_MARKERS = (
     "without the repository being",
     "It does **not** establish benchmark superiority",
     "## References",
-    f"- Repository model card: https://github.com/kurtvalcorza/{REPO_NAME}/blob/main/{MODEL_CARD_LINK}",
+    f"https://github.com/kurtvalcorza/{REPO_NAME}/blob/main/{MODEL_CARD_LINK}",
 )
 # Patterns that must never appear in tutorial code (comment-stripped), in any cell.
 FORBIDDEN_PATTERNS = (

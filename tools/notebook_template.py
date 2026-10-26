@@ -34,6 +34,8 @@ BADGES = [
     ("arXiv", "https://img.shields.io/badge/arXiv-2502.02737-b31b1b.svg", "https://arxiv.org/abs/2502.02737"),
 ]
 
+RUN = 'the 2026-10-23 Colab T4 run of revision `6c22e80` (notebook blob `4651e699`, recorded in `docs/release-verification.md`)'
+
 TEMPLATE = {
     "package": "lmpipeline",
     "repo_name": REPO,
@@ -68,7 +70,7 @@ TEMPLATE = {
     "guided": {
         "opening": [
             (
-                "**Who this notebook is for.** A learner who knows basic Python, has run a Colab notebook, and wants to adapt an open instruction-tuned language model to their own conversations with QLoRA on a free T4 GPU — and to see exactly which tokens are trained, what the loss numbers do and do not mean, and how the adapter is shipped and reloaded. No transformer internals are assumed: *LoRA*, *QLoRA*, *chat template*, *loss masking* and *perplexity* are explained where they first matter and again in the **Glossary** at the end. A CUDA GPU is required (a Colab T4 is enough). The intended audience is learners and practitioners trying QLoRA for the first time; this is a teaching run, not a production fine-tuning recipe.\n\n**Input → Model → Output.**\n\n| | What it is in this notebook |\n|---|---|\n| Input | 120 chat-formatted conversations (default: the pinned public Filipino Q&A sample, 96 for training and 24 held out; BYOD: your `train.jsonl` with optional validation and test files) and the training knobs in Section 4 |\n| Model | the pinned SmolLM2-360M-Instruct base frozen in 4-bit `nf4`, plus small trainable LoRA matrices on the attention and MLP projections, trained by a plain PyTorch loop with assistant-only loss |\n| Output | an adapter bundle (LoRA weights, tokenizer, metrics, provenance, a SHA-256 manifest) and its ZIP; validation loss and perplexity of the base model and of the adapter (plus train loss per epoch); base versus adapted answers; a reload check that says what the artifact reproduces; an evaluation report; a result JSON and a probe CSV |\n\n**How to use this notebook.** Choose **Runtime → Change runtime type → T4 GPU**, then **Runtime → Run all**. Run all completes in one pass: Section 1 installs nothing into the notebook's own Python, so no restart is needed. Sections 1–3 are **infrastructure** — the isolated environment, the carried pipeline module and the pinned base snapshot — and their cells are collapsed; you may run them without studying them. The learning path starts in Section 4. Form fields (`# @param`) are the knobs: change one and re-run from that cell down. Re-running Section 6 or 7 starts again from the frozen base model, so a baseline is never taken from an adapted model and a second training run never stacks on the first; after a full run the trained model stays in memory, so Section 9 (`CUSTOM_PROMPT`) and the optional decoding activity (Section 12) can be re-run on their own; Section 11 needs only Sections 1–3. Before each principal result the notebook asks you to **Predict**; after it come **What to notice** and a collapsible **Check your reasoning**. No passing clean-run record exists yet for this notebook (`tutorials/RELEASE_VERIFICATION.md`): the only recorded run (Kaggle T4, 2026-09-14) was of an earlier revision that still installed into the kernel and needed a restart. Where the prose quotes its numbers it says so; the worked answers state what the code guarantees and what to expect qualitatively — compare them with your own run. A **Conclusion** template follows the interpretation; **Troubleshooting** and a **Glossary** are at the end. Writing your predictions down is optional.\n\n**Roadmap:** 1–3 infrastructure → 4 knobs and data (or bring your own) → 5 validation, chat template and assistant-only loss masking *(core concept)* → 6 a deterministic baseline: base answers and base validation loss *(evaluation practice)* → 7 LoRA adapters and the training loop *(core concept)* → 8 the evaluation report: optimisation evidence, not task quality *(evaluation practice)* → 9 new prompts with the adapter off and on, plus an optional greedy-versus-sampling activity → 10 export the adapter bundle and check what a fresh reload reproduces *(engineering)* → interpretation and conclusion → 11 use an adapter bundle made elsewhere: pinned, digest-checked before extraction, verified, attached and used *(core concept: the trust boundary)* → 12 optional greedy-versus-sampling activity → next experiments, troubleshooting, glossary, references."
+                "**Who this notebook is for.** A learner who knows basic Python, has run a Colab notebook, and wants to adapt an open instruction-tuned language model to their own conversations with QLoRA on a free T4 GPU — and to see exactly which tokens are trained, what the loss numbers do and do not mean, and how the adapter is shipped and reloaded. No transformer internals are assumed: *LoRA*, *QLoRA*, *chat template*, *loss masking* and *perplexity* are explained where they first matter and again in the **Glossary** at the end. A CUDA GPU is required (a Colab T4 is enough). The intended audience is learners and practitioners trying QLoRA for the first time; this is a teaching run, not a production fine-tuning recipe.\n\n**Input → Model → Output.**\n\n| | What it is in this notebook |\n|---|---|\n| Input | 120 chat-formatted conversations (default: the pinned public Filipino Q&A sample, 96 for training and 24 held out; BYOD: your `train.jsonl` with optional validation and test files) and the training knobs in Section 4 |\n| Model | the pinned SmolLM2-360M-Instruct base frozen in 4-bit `nf4`, plus small trainable LoRA matrices on the attention and MLP projections, trained by a plain PyTorch loop with assistant-only loss |\n| Output | an adapter bundle (LoRA weights, tokenizer, metrics, provenance, a SHA-256 manifest) and its ZIP; validation loss and perplexity of the base model and of the adapter (plus train loss per epoch); base versus adapted answers; a reload check that says what the artifact reproduces; an evaluation report; a result JSON and a probe CSV |\n\n**How to use this notebook.** Choose **Runtime → Change runtime type → T4 GPU**, then **Runtime → Run all**. Run all completes in one pass: Section 1 installs nothing into the notebook's own Python, so no restart is needed. Sections 1–3 are **infrastructure** — the isolated environment, the carried pipeline module and the pinned base snapshot — and their cells are collapsed; you may run them without studying them. The learning path starts in Section 4. Form fields (`# @param`) are the knobs: change one and re-run from that cell down. Re-running Section 6 or 7 starts again from the frozen base model, so a baseline is never taken from an adapted model and a second training run never stacks on the first; after a full run the trained model stays in memory, so Section 9 (`CUSTOM_PROMPT`) and the optional decoding activity (Section 12) can be re-run on their own; Section 11 needs only Sections 1–3. Before each principal result the notebook asks you to **Predict**; after it come **What to notice** and a collapsible **Check your reasoning**. Hosted runs of this notebook are recorded in `docs/release-verification.md`. Where the prose quotes a number it names the recorded run or runs it came from; your run may differ, so read the values your own run prints. The worked answers state what the code guarantees and what the named runs showed — compare them with your own run. A **Conclusion** template follows the interpretation; **Troubleshooting** and a **Glossary** are at the end. Writing your predictions down is optional.\n\n**Roadmap:** 1–3 infrastructure → 4 knobs and data (or bring your own) → 5 validation, chat template and assistant-only loss masking *(core concept)* → 6 a deterministic baseline: base answers and base validation loss *(evaluation practice)* → 7 LoRA adapters and the training loop *(core concept)* → 8 the evaluation report: optimisation evidence, not task quality *(evaluation practice)* → 9 new prompts with the adapter off and on, plus an optional greedy-versus-sampling activity → 10 export the adapter bundle and check what a fresh reload reproduces *(engineering)* → interpretation and conclusion → 11 use an adapter bundle made elsewhere: pinned, digest-checked before extraction, verified, attached and used *(core concept: the trust boundary)* → 12 optional greedy-versus-sampling activity → next experiments, troubleshooting, glossary, references."
             )
         ]
     },
@@ -126,6 +128,12 @@ TEMPLATE = {
     "prerequisites": [
         "- **Runtime:** a Colab GPU runtime (*Runtime ▸ Change runtime type ▸ T4 GPU*) or another CUDA machine; QLoRA needs `bitsandbytes` 4-bit kernels, so the training cell stops on CPU. Python 3.12 is the executed configuration. Section 1 builds a separate environment from the hash-locked pins (nothing is installed into the notebook's own Python, so no restart is needed); its PyTorch CUDA wheels are the largest download of the run.",
         "- **Knowledge:** Python functions, dictionaries and list comprehensions; what a language model does at a high level (predicts the next token). Transformer internals are not required.",
+        "- **Overlap with the pretraining data (DAT9):** the repository model card reports, from the upstream card, about "
+        "four trillion pretraining tokens from FineWeb-Edu, DCLM, The Stack and further filtered datasets that are not fully "
+        "disclosed, SFT on public and curated data, and DPO on UltraFeedback. `databricks-dolly-15k` is a widely used public "
+        "instruction set and `jpaulpoliquit/ph-sft-ai-authored-v1` is a public Hub table, so either may be in, or close to, "
+        "the undisclosed pretraining or SFT data: overlap is **not verified** and cannot be ruled out. The base-versus-adapted "
+        "validation loss is therefore evidence that the run optimised, not evidence of how the model does on unseen text.\n"
         "- **Data:** the default sample is the pinned public `jpaulpoliquit/ph-sft-ai-authored-v1` table (513 AI-authored Filipino/English Q&A rows, Apache-2.0), fetched from the Hugging Face Hub at an immutable dataset revision; `Sample: Dolly` (`databricks-dolly-15k`, CC-BY-SA 3.0 — adapters trained on it inherit the share-alike condition) is the alternative. Optional BYOD is gated off by default so the sample path runs top-to-bottom without interaction; it reads a folder or ZIP from `BYOD_PATH` (Kaggle, Jupyter) or, when that is empty on Colab, the upload dialog. Expected BYOD input: `train.jsonl` (plus optional `validation.jsonl`/`val.jsonl` and `test.jsonl`), each line a `messages`, `prompt`/`completion` or `instruction`/`input`/`output` record, uploaded as files or one ZIP. Do not upload confidential or restricted data to a hosted notebook environment unless you are authorized to do so. Uploaded inputs remain in the notebook runtime; this pipeline does not send them to a third-party inference API.",
     ],
     "cells": [
@@ -134,7 +142,7 @@ TEMPLATE = {
                 "## 4. Choose the knobs and load the sample or optional BYOD\n\n"
                 "The carried module pinned the base model in Section 3 and loaded it in 4-bit **NormalFloat (`nf4`)** with "
                 "double quantization: a 360M model drops from ~0.7 GB of 16-bit weights to well under 0.3 GB, and the frozen "
-                "weights are dequantized on the fly to the compute dtype — bfloat16 whenever `torch.cuda.is_bf16_supported()` is true, which includes a T4 (emulated; the recorded run reports `bfloat16` on a Tesla T4), float16 otherwise — for "
+                "weights are dequantized on the fly to the compute dtype — bfloat16 whenever `torch.cuda.is_bf16_supported()` is true, which includes a T4 (emulated; " + RUN + " reports `bfloat16` on a Tesla T4), float16 otherwise — for "
                 "each matrix multiply. The cell first confirms a CUDA device is present (QLoRA needs it) and prints the "
                 "registry ceilings before any data is touched.\n\n"
                 "Supervised fine-tuning needs conversations, not rows. Whatever the source schema — chat `messages`, "
@@ -342,7 +350,7 @@ TEMPLATE = {
                 "so the comparison after training is deterministic given the same weights, device and "
                 "library versions. `generate` puts the model in eval mode (no dropout), turns the KV cache on, and restores "
                 "whatever state it found, so the same helper is safe to call in the middle of training later. Look for two "
-                "short answers; the unadapted base model may echo the Filipino prompt back almost verbatim (the recorded run did), "
+                "short answers; the unadapted base model may echo the Filipino prompt back almost verbatim (" + RUN + " did), "
                 "answer in English, or mix the two.\n\n"
                 "The cell also scores the **unadapted base model on the validation split** with `pipe.evaluate_loss` — the same "
                 "function, the same 24 rows and the same per-supervised-token units that Section 7 uses after training. Without "
@@ -400,7 +408,7 @@ TEMPLATE = {
                 "(`gate/up/down_proj`); attention-only LoRA is cheaper but adapts noticeably less. "
                 "`prepare_model_for_kbit_training` does the QLoRA housekeeping: layer norms and the output head stay in "
                 "32-bit for stable gradients through the 4-bit layers, and gradient checkpointing trades compute for memory. "
-                "Expect **about 1.2 %** of the parameters to be trainable (the recorded run: 4 341 760 of 366 162 880, 1.186 %).\n\n"
+                "Expect **about 1.2 %** of the parameters to be trainable (" + RUN + ": 4 341 760 of 366 162 880, 1.186 %).\n\n"
                 "The loop is deliberately plain PyTorch rather than a `Trainer`, so every moving part is visible: one example "
                 "per forward pass and an optimizer step every two (`GRAD_ACCUM = 2`, an effective batch of 2 with no "
                 "padding; the loss is scaled by the window size so the gradient matches a true batch), **AdamW at a constant "
@@ -409,9 +417,13 @@ TEMPLATE = {
                 "control the shuffle; bitwise determinism across GPU kernels is not promised. Every epoch's train and validation "
                 "loss is kept in `METRICS['epochs']`, and the cell ends with a **base → adapted** validation-loss line against the "
                 "number Section 6 recorded. Afterwards the two probe prompts are asked again for the before/after table. For "
-                "comparison only: the recorded Kaggle T4 run of an earlier revision of this notebook (2026-09-14, after a kernel "
+                "comparison: the nine recorded Colab T4 runs of this notebook (revisions `d185817`, `50f07ea`, `edcb9e3`, `6c22e80`, `4f3a907` and "
+                "`c745a70`, 2026-10-07 to 2026-10-25, default and activity paths, listed in `docs/release-verification.md`) printed "
+                "train loss 3.2646–3.2665, validation loss 3.2604–3.2640, perplexity 26.1–26.2, 51.9–55.8 s of training "
+                "(`wallSeconds`) and 0.66 GiB peak with these defaults; the earlier Kaggle T4 run of "
+                "revision `e9d7e6b` (blob `46991157`, 2026-09-14, after a kernel "
                 "restart that this revision no longer needs) printed train loss 3.266, validation loss 3.261, perplexity 26.1, "
-                "55.5 s and 0.66 GiB peak with these defaults; your numbers will differ somewhat. Re-running this cell trains a new "
+                "55.5 s and 0.66 GiB peak. These are records of those runs, not targets: your run may differ — read the values printed above. Re-running this cell trains a new "
                 "adapter on the frozen base (the cell reloads the base first if it already carries LoRA layers); it never "
                 "trains on top of the previous adapter.\n\n"
                 "**Predict:** what percentage of the parameters will be trainable? After one epoch, will the adapted validation loss "
@@ -420,12 +432,12 @@ TEMPLATE = {
                 "changed language or register compared with the baseline.\n\n"
                 "<details><summary>Check your reasoning</summary>\n\n"
                 "About 1 %: rank-8 matrices on seven projection types are small next to 360 million frozen weights, though not "
-                "\"a fraction of a percent\" — the recorded run printed 1.186 %. An adapted validation loss below the base one "
+                "\"a fraction of a percent\" — " + RUN + " printed 1.186 %. An adapted validation loss below the base one "
                 "means the epoch moved the model towards the format of these rows; the amount is the interesting part, and no "
                 "direction is guaranteed on your data. Validation loss at or slightly below training loss after one epoch is "
                 "normal here — dropout is active while training, and the validation split is manufactured from the same source "
-                "(Section 8 explains why that makes it optimisation evidence only); the recorded run showed exactly that pattern. "
-                "The exact values depend on your GPU and run.\n\n"
+                "(Section 8 explains why that makes it optimisation evidence only); " + RUN + " showed that pattern, as did the "
+                "2026-10-25 runs of revision `c745a70`, but this can vary between runs. The exact values depend on your GPU and run.\n\n"
                 "</details>"
             ),
             "code": (
@@ -546,8 +558,8 @@ TEMPLATE = {
                 "**What to notice:** compare each BASE/ADAPTED pair on language, length and whether it stops cleanly; a "
                 "repeated phrase is a greedy-decoding loop, not a training bug.\n\n"
                 "<details><summary>Check your reasoning</summary>\n\n"
-                "Often, but not always: about a hundred training rows shift the *style* of answers, so expect some prompts to "
-                "change register or language and others to look much like the base. Neither column is scored; this is "
+                "Read the BASE/ADAPTED pairs printed above; there is no single right answer. About a hundred training rows "
+                "can shift the *style* of an answer (its register or language) without changing every prompt. Neither column is scored; this is "
                 "qualitative evidence.\n\n"
                 "</details>"
             ),
@@ -891,7 +903,7 @@ TEMPLATE = {
                 "differ on both prompts?\n\n"
                 "<details><summary>Check your reasoning</summary>\n\n"
                 "The recorded 2026-10-07 T4 run that consumed this same bundle found the greedy answers differ on 2 of 2 prompts; "
-                "expect the adapted answers to follow the register of the training rows. A different GPU or library version can "
+                "the adapted answers may follow the register of the training rows, and this can vary between runs. A different GPU or library version can "
                 "change greedy text, so `answers_differ` can be `False` on a prompt without the adapter being broken; Section 11.2 "
                 "already proved its weights are present and non-zero.\n\n"
                 "</details>"
@@ -977,9 +989,9 @@ TEMPLATE = {
                 "**Predict:** which answer is most likely to loop? Will the two sampled answers be identical? Will changing `SEED` "
                 "change the greedy answer?\n\n"
                 "<details><summary>Check your reasoning</summary>\n\n"
-                "The greedy answer, if any: it always takes the most likely token, so once a phrase becomes the most likely "
-                "continuation of itself it repeats. The sampled answers usually differ from each other (two draws can coincide, "
-                "but rarely over 96 tokens) and loop less. Changing `SEED` changes the sampled answers only; the greedy answer "
+                "Any of the three can loop; compare the counts printed above. Greedy decoding always takes the most likely token, "
+                "so once a phrase becomes the most likely continuation of itself it repeats, and a sampled answer can loop as "
+                "much or more. The two sampled answers can coincide, but rarely over 96 tokens. Changing `SEED` changes the sampled answers only; the greedy answer "
                 "depends on the weights, not the seed.\n\n"
                 "</details>"
             ),
@@ -1049,14 +1061,10 @@ TEMPLATE = {
         "- **External artifact:** an artifact produced outside the current run — here the pinned sample bundle from a recorded earlier run of this notebook (Section 11).\n"
         "- **Trust boundary:** the point where bytes from someone else become state in your process; safetensors weights hold tensors only, while configuration and tokenizer files are code-adjacent: they cannot run Python here, but they decide what the model sees and does.\n\n"
         "## References\n\n"
-        f"- Repository README: https://github.com/kurtvalcorza/{REPO}/blob/main/README.md\n"
-        f"- Repository model card: https://github.com/kurtvalcorza/{REPO}/blob/main/weights/smollm2-360m/MODEL_CARD.md\n"
-        f"- Weight provenance: https://github.com/kurtvalcorza/{REPO}/blob/main/weights/README.md\n"
-        f"- Release verification record (the run that produced the Section 11 sample bundle): https://github.com/kurtvalcorza/{REPO}/blob/main/docs/release-verification.md\n"
-        "- Upstream model: https://huggingface.co/{MODEL_ID}\n"
-        "- Upstream code: https://github.com/huggingface/smollm\n"
-        "- SmolLM2 paper: https://arxiv.org/abs/2502.02737\n"
-        "- QLoRA: https://arxiv.org/abs/2305.14314\n"
-        "- LoRA: https://arxiv.org/abs/2106.09685"
+        "[1] L. Ben Allal et al., \"SmolLM2: When smol goes big — data-centric training of a small language model,\" arXiv:2502.02737, 2025; code: https://github.com/huggingface/smollm. [Online]. Available: https://arxiv.org/abs/2502.02737\n\n"
+        "[2] Hugging Face, \"SmolLM2-360M-Instruct\" ({MODEL_ID}), Hugging Face model repository. [Online]. Available: https://huggingface.co/{MODEL_ID}\n\n"
+        "[3] T. Dettmers, A. Pagnoni, A. Holtzman, and L. Zettlemoyer, \"QLoRA: Efficient finetuning of quantized LLMs,\" in *Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)*, 2023. [Online]. Available: https://arxiv.org/abs/2305.14314\n\n"
+        "[4] E. J. Hu et al., \"LoRA: Low-rank adaptation of large language models,\" in *Proc. Int. Conf. Learn. Represent. (ICLR)*, 2022. [Online]. Available: https://arxiv.org/abs/2106.09685\n\n"
+        f"[5] K. Valcorza, \"language-model-pipeline: README, model card, weight provenance and release verification record\" (the record names the run that produced the Section 11 sample bundle), GitHub repository. [Online]. Available: https://github.com/kurtvalcorza/{REPO}/blob/main/weights/smollm2-360m/MODEL_CARD.md; https://github.com/kurtvalcorza/{REPO}/blob/main/README.md; https://github.com/kurtvalcorza/{REPO}/blob/main/weights/README.md; https://github.com/kurtvalcorza/{REPO}/blob/main/docs/release-verification.md"
     ),
 }

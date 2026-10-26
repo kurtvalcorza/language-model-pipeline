@@ -1,0 +1,53 @@
+{
+  "repo": "language-model-pipeline",
+  "sha": "b64f6896118a8138fa59b6452869b62707bf3ac4",
+  "notebook": "tutorials/language_model_finetuning_colab.ipynb",
+  "blob": "0272ec08385f543e05bc8b07e652ff6a68cfed37",
+  "gpu": "T4",
+  "session": "suite-language-b64f689-f19b",
+  "started_utc": "2026-10-25T18:12:52+00:00",
+  "runner": "Colab CLI `colab exec -f` on a fresh session (not a browser Run all)",
+  "overrides": [
+    {
+      "name": "RUN_DECODING_EXPERIMENT",
+      "from": "False",
+      "to": "True"
+    }
+  ],
+  "run_copy_blob": "ea68b576fe989f836775a016aec8930f9c97f9f6",
+  "run_copy_sha256": "d5c767ad2d82b6dd4b7a876a57f86baea81c45db9645bc8e092ba635a1217e88",
+  "run_copy_note": "the executed copy differs from the committed blob only in the listed assignment literals; input_unchanged compares against that copy",
+  "status": "[suite-language-b64f689-f19b] gpu-t4-s-kkb-euw4c2-1jav7mw4zzna7 | Hardware: T4 | Shape: Standard | Variant: GPU | Status: IDLE",
+  "exec_exit_code": 0,
+  "stopped": true,
+  "stop_verified": true,
+  "wall_s": 333.9,
+  "input_unchanged": true,
+  "executed_file": "language_model_finetuning_colab_b64f689_colab-cli-t4_output.ipynb",
+  "log_cells": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "log_total": 15,
+  "code_cells": 15,
+  "executed_cells": 14,
+  "errors": [],
+  "execution_counts": [],
+  "sequential": null,
+  "executed_sha256": "46b0352cc9efd4c6c9ca8c7c0adbf1150e121133297bffe46da152c8c9f321c0",
+  "log_sequential_complete": true,
+  "verdict": "PASS"
+}

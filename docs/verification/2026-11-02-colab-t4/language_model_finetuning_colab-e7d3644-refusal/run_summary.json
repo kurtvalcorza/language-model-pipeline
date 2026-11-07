@@ -1,0 +1,69 @@
+{
+  "repo": "language-model-pipeline",
+  "sha": "e7d364447bc639753f6b8469d74fade9996d320e",
+  "notebook": "tutorials/language_model_finetuning_colab.ipynb",
+  "blob": "790df789cb981dec0777247c390e8c3bf19da54c",
+  "gpu": "T4",
+  "session": "suite-language-e7d3644-f19b",
+  "started_utc": "2026-11-02T23:37:36+00:00",
+  "runner": "Colab CLI `colab exec -f` on a fresh session (not a browser Run all)",
+  "overrides": [
+    {
+      "name": "USE_BYOD",
+      "from": "False",
+      "to": "True"
+    },
+    {
+      "name": "BYOD_PATH",
+      "from": "''",
+      "to": "'/etc'"
+    }
+  ],
+  "run_copy_blob": "087f9c7567d4ad2f810a8de4eec444255784756c",
+  "run_copy_sha256": "d1fbb266ab839c31e3dc0e39da596248200c4b1617b910f1cd934f0ab088fa72",
+  "run_copy_note": "refusal run: the run copy is the committed notebook with the listed assignment overrides, cut immediately after the refusal cell and re-serialised (nbformat layout); input_unchanged compares against that copy",
+  "truncated_after_cell": "language_model_finetuning-12",
+  "refusal_cell_ref": "language_model_finetuning-12",
+  "refusal_cell_index": 5,
+  "cells_dropped": 23,
+  "code_cells_dropped": 10,
+  "original_sha256": "429e69baab7257e627c350ec7301b7467b56e24bbc5e2b470dbe1fc493631e30",
+  "status": "[suite-language-e7d3644-f19b] gpu-t4-s-usw4a2-3rknfspuv2nr9 | Hardware: T4 | Shape: Standard | Variant: GPU | Status: IDLE",
+  "exec_exit_code": 0,
+  "stopped": true,
+  "stop_verified": true,
+  "wall_s": 121.2,
+  "input_unchanged": true,
+  "executed_file": "language_model_finetuning_colab_e7d3644_colab-cli-t4_output.ipynb",
+  "log_cells": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "log_total": 5,
+  "code_cells": 5,
+  "executed_cells": 4,
+  "errors": [
+    {
+      "cell": "language_model_finetuning-12",
+      "ename": "InputRefused",
+      "evalue": "etc: BYOD requires train.jsonl at the top level of the folder or ZIP; found: nothing. Add it and run this cell again."
+    }
+  ],
+  "execution_counts": [],
+  "sequential": null,
+  "executed_sha256": "8cda9a46577a19529fa5fe9783a9c52cbc0d687f777705fb908ad4290344e86c",
+  "log_sequential_complete": true,
+  "mode": "expect_refusal",
+  "refusal_line": "Refused: etc: BYOD requires train.jsonl at the top level of the folder or ZIP; found: nothing. Add it and run this cell again.",
+  "halting_cell_index": 5,
+  "halting_cell_id": "language_model_finetuning-12",
+  "error_cells": [
+    5
+  ],
+  "refusal_fail_reasons": [],
+  "refusal_ok": true,
+  "verdict": "PASS"
+}

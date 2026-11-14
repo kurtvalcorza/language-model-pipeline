@@ -18,7 +18,6 @@ import random
 import re
 import shutil
 import stat
-import subprocess
 import zipfile
 from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
@@ -162,26 +161,6 @@ def seed_everything(seed: int) -> dict[str, Any]:
             "stochastic decoding is nondeterministic unless separately seeded",
         ],
     }
-
-
-def assert_finetuner_checkout(root: str | Path, expected_revision: str) -> str:
-    """Prove the production source imported by a notebook is the immutable requested SHA."""
-    if re.fullmatch(r"[0-9a-f]{40}", expected_revision) is None:
-        raise ValueError("expected finetuner revision must be a 40-character commit SHA")
-    root = Path(root).resolve()
-    try:
-        actual = subprocess.check_output(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
-            text=True,
-            stderr=subprocess.STDOUT,
-        ).strip()
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise RuntimeError("Could not establish production finetuner checkout identity") from exc
-    if actual != expected_revision:
-        raise RuntimeError(
-            f"Production finetuner checkout mismatch: {actual} != {expected_revision}"
-        )
-    return actual
 
 
 def resolve_tutorial_model(

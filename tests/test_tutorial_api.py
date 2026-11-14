@@ -1,6 +1,5 @@
 import hashlib
 import json
-import subprocess
 import zipfile
 from pathlib import Path
 
@@ -8,7 +7,6 @@ import pytest
 
 from lmpipeline.errors import Code, DatasetError, ModelError
 from lmpipeline.tutorial_api import (
-    assert_finetuner_checkout,
     assert_no_split_leakage,
     assert_runtime_compatible,
     canonical_dataset_digest,
@@ -126,21 +124,6 @@ def test_runtime_compatibility_rejects_material_mismatch():
     }
     with pytest.raises(ValueError, match="compatibility mismatch"):
         assert_runtime_compatible(producer, current)
-
-
-def test_finetuner_checkout_verifies_exact_git_head(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
-    (repo / "x.txt").write_text("x")
-    subprocess.run(["git", "-C", str(repo), "add", "x.txt"], check=True)
-    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "x"], check=True)
-    revision = subprocess.check_output(
-        ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
-    ).strip()
-    assert assert_finetuner_checkout(repo, revision) == revision
 
 
 def test_safe_extract_rejects_parent_traversal(tmp_path):

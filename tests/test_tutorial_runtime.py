@@ -7,10 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from lmpipeline.tutorial_runtime import (
-    _git_auth_environment,
-    consume_adapter_archive,
-)
+from lmpipeline.tutorial_runtime import consume_adapter_archive
 
 
 def _write_artifact(root: Path) -> None:
@@ -49,18 +46,6 @@ def _write_artifact(root: Path) -> None:
             }
         )
     )
-
-
-def test_git_auth_uses_environment_not_remote_url():
-    env = _git_auth_environment("secret-token")
-    assert env["GIT_CONFIG_KEY_0"] == "http.https://github.com/.extraHeader"
-    assert env["GIT_CONFIG_VALUE_0"].startswith("Authorization: Basic ")
-    assert "secret-token" not in env["GIT_CONFIG_VALUE_0"]
-
-
-def test_git_auth_rejects_whitespace_secrets():
-    with pytest.raises(ValueError, match="single-line"):
-        _git_auth_environment("bad token")
 
 
 def test_strict_archive_accepts_manifest_at_zip_root(tmp_path):

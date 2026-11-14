@@ -72,6 +72,12 @@ and unit checks. They are **not** execution evidence.
 | Kaggle CLI kernel | Kaggle GPU kernel (T4 / P100), Python 3.12 image | Reproducible clean-room executor of the same class; the notebook is pushed verbatim plus one leading shim cell that provides `google.colab` and chdirs to a scratch directory (no repository checkout is needed — the notebook is standalone). The 2026-09-07 Kaggle T4 run of the previous, repository-installing revision (52.7 s training loop, 1.52 GiB peak, Qwen3-0.6B) does **not** cover the standalone carrier or the pinned SmolLM2-360M snapshot |
 | Local workstation (pre-flight only) | RTX 5070 Ti, sequential cell executor with a `google.colab` shim | Builder pre-flight to catch defects before spending cloud runs; **not** a supported runtime and not promotion evidence |
 
+There is no GitHub Actions executor. The supplemental `.github/workflows/notebook-release-gpu.yml` (added in
+`d31fbd9`, PR #62) needed a self-hosted GPU runner and a `DIMER_FINETUNER_READ_TOKEN` secret, never ran (0 runs in
+the Actions API), and was removed for #70. The standalone notebook clones nothing and reads no token. Release
+execution evidence comes from hosted runs recorded in this document, in current practice Colab CLI runs on a fresh
+Colab T4.
+
 ## Supported release verification procedure
 
 Before changing the registry status from `Candidate` to `Release-grade`:

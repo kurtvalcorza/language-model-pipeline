@@ -341,7 +341,8 @@ def test_worker_colab_stubs_have_specs(name: str, real_google: bool, monkeypatch
 
 def test_tier_c_section_8_comparison_quotes_every_recorded_colab_t4_run():
     # Tier C prose-mismatch fix (2026-10-25): the comparison note gives the range over the seven Colab T4 runs,
-    # and keeps the Kaggle T4 figures labelled as that earlier run.
+    # and keeps the Kaggle T4 figures labelled as that earlier run. These literals pin the current wording and guard
+    # the stale spans; tests/test_section8_spans_from_runs.py (#95) checks the spans still cover every recorded run.
     markdown = _markdown(E2E)
     assert "For comparison only: the recorded Kaggle T4 run" not in markdown
     for quoted in ("fifteen recorded Colab T4 runs", "train loss 3.2641–3.2665", "validation loss 3.2592–3.2640",
